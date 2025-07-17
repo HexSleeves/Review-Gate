@@ -1,7 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Review Gate V2 - Windows Batch Uninstaller Script
+REM Review Gate V3 - Windows Batch Uninstaller Script
 REM Author: Lakshman Turlapati
 
 REM Enable ANSI escape sequences for colors (Windows 10+)
@@ -27,11 +27,11 @@ set "log_step=echo %WHITE%"
 set "log_header=echo %CYAN%"
 
 echo.
-%log_header% Review Gate V2 - Uninstaller%NC%
+%log_header% Review Gate V3 - Uninstaller%NC%
 %log_header%=================================%NC%
 echo.
 
-set /p confirm="%YELLOW%WARNING: Are you sure you want to uninstall Review Gate V2? [y/N]: %NC%"
+set /p confirm="%YELLOW%WARNING: Are you sure you want to uninstall Review Gate V3? [y/N]: %NC%"
 if /i not "%confirm%"=="y" if /i not "%confirm%"=="yes" (
     %log_info% Uninstallation cancelled%NC%
     pause
@@ -39,10 +39,10 @@ if /i not "%confirm%"=="y" if /i not "%confirm%"=="yes" (
 )
 
 echo.
-%log_progress% Removing Review Gate V2...%NC%
+%log_progress% Removing Review Gate V3...%NC%
 
 REM Remove installation directory
-set "REVIEW_GATE_DIR=%USERPROFILE%\cursor-extensions\review-gate-v2"
+set "REVIEW_GATE_DIR=%USERPROFILE%\cursor-extensions\review-gate-v3"
 if exist "%REVIEW_GATE_DIR%" (
     rmdir /s /q "%REVIEW_GATE_DIR%"
     %log_success% Removed installation directory%NC%
@@ -54,20 +54,20 @@ REM Remove MCP configuration
 set "MCP_CONFIG=%USERPROFILE%\.cursor\mcp.json"
 if exist "%MCP_CONFIG%" (
     %log_progress% Updating MCP configuration...%NC%
-    
+
     REM Create backup first
     for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
     set "timestamp=!dt:~0,4!!dt:~4,2!!dt:~6,2!_!dt:~8,2!!dt:~10,2!!dt:~12,2!"
     copy "%MCP_CONFIG%" "%MCP_CONFIG%.backup_uninstall.!timestamp!" >nul 2>&1
-    
+
     REM Simplified approach - create basic empty config if exists
     if exist "%MCP_CONFIG%" (
         echo {
         echo   "mcpServers": {}
         echo }
     ) > "%MCP_CONFIG%"
-    
-    %log_success% Removed review-gate-v2 from MCP configuration%NC%
+
+    %log_success% Removed review-gate-v3 from MCP configuration%NC%
     %log_info% Backup created: %MCP_CONFIG%.backup_uninstall.!timestamp!%NC%
 ) else (
     %log_warning% MCP configuration not found%NC%
@@ -100,7 +100,7 @@ if exist "%ProgramFiles%\Cursor\resources\app\bin\cursor.cmd" (
 
 if defined CURSOR_CMD (
     %log_progress% Attempting automated extension removal...%NC%
-    "!CURSOR_CMD!" --uninstall-extension "review-gate-v2" >nul 2>&1
+    "!CURSOR_CMD!" --uninstall-extension "review-gate-v3" >nul 2>&1
     if !errorlevel! equ 0 (
         %log_success% Extension removed automatically via command line%NC%
         set "EXTENSION_REMOVED=true"
@@ -117,12 +117,12 @@ if "!EXTENSION_REMOVED!" equ "false" (
     %log_header% Manual Steps Required:%NC%
     %log_step% 1. Open Cursor IDE%NC%
     %log_step% 2. Go to Extensions (Ctrl+Shift+X)%NC%
-    %log_step% 3. Find 'Review Gate V2' and uninstall it%NC%
+    %log_step% 3. Find 'Review Gate V3' and uninstall it%NC%
     %log_step% 4. Restart Cursor%NC%
     echo.
 )
 
-%log_success% Review Gate V2 uninstallation complete!%NC%
+%log_success% Review Gate V3 uninstallation complete!%NC%
 %log_header%==========================================%NC%
 echo.
 %log_header% What was removed:%NC%

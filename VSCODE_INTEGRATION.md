@@ -1,8 +1,8 @@
-# VSCode Extension Integration Guide for Review Gate V2
+# VSCode Extension Integration Guide for Review Gate V3
 
 ## Overview
 
-Review Gate V2 now provides enhanced integration with VSCode through its callback system and extension architecture. This guide covers how to integrate the Review Gate callback system into your VSCode extension development workflow.
+Review Gate V3 now provides enhanced integration with VSCode through its callback system and extension architecture. This guide covers how to integrate the Review Gate callback system into your VSCode extension development workflow.
 
 ## Key Features
 
@@ -33,12 +33,12 @@ interface ReviewGateCallback {
 
 ## Installation Steps
 
-### Step 1: Install Review Gate V2
+### Step 1: Install Review Gate V3
 
 ```bash
 # Clone the repository
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Run the enhanced installer
 ./install.sh
@@ -203,7 +203,7 @@ await reviewGate.triggerCallback('file_review', {
 
 ## File Structure
 
-```
+```bash
 your-extension/
 ├── src/
 │   ├── extension.ts
@@ -367,5 +367,3 @@ For VSCode integration support:
 - Review the logs for error messages
 
 ---
-
-*This integration guide is part of Review Gate V2 by Lakshman Turlapati*

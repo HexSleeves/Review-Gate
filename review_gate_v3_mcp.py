@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Review Gate 2.0 - Advanced MCP Server with Cursor Integration
-Author: Lakshman Turlapati
+Author: Lakshman Turlapati & HexSleeves
 Provides popup chat, quick input, and file picker tools that automatically trigger Cursor extension.
 
 Requirements:

@@ -1,9 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
 
-REM Review Gate V2 - Windows Batch Installation Script
+REM Review Gate V3 - Windows Batch Installation Script
 REM Author: Lakshman Turlapati
-REM This script installs Review Gate V2 globally for Cursor IDE on Windows
+REM This script installs Review Gate V3 globally for Cursor IDE on Windows
 
 REM Enable ANSI escape sequences for colors
 for /f "tokens=2 delims=[]" %%i in ('ver') do set "winver=%%i"
@@ -28,7 +28,7 @@ set "log_step=echo %WHITE%"
 set "log_header=echo %CYAN%"
 
 echo.
-%log_header% Review Gate V2 - Windows Installation%NC%
+%log_header% Review Gate V3 - Windows Installation%NC%
 %log_header%===========================================%NC%
 echo.
 
@@ -109,7 +109,7 @@ if errorlevel 1 (
 
 REM Create global Cursor extensions directory
 set "CURSOR_EXTENSIONS_DIR=%USERPROFILE%\cursor-extensions"
-set "REVIEW_GATE_DIR=%CURSOR_EXTENSIONS_DIR%\review-gate-v2"
+set "REVIEW_GATE_DIR=%CURSOR_EXTENSIONS_DIR%\review-gate-v3"
 
 %log_progress% Creating global installation directory...%NC%
 if not exist "!CURSOR_EXTENSIONS_DIR!" mkdir "!CURSOR_EXTENSIONS_DIR!"
@@ -117,10 +117,10 @@ if not exist "!REVIEW_GATE_DIR!" mkdir "!REVIEW_GATE_DIR!"
 
 REM Copy MCP server files
 %log_progress% Copying MCP server files...%NC%
-if exist "%SCRIPT_DIR%\review_gate_v2_mcp.py" (
-    copy "%SCRIPT_DIR%\review_gate_v2_mcp.py" "!REVIEW_GATE_DIR!\" >nul
+if exist "%SCRIPT_DIR%\review_gate_v3_mcp.py" (
+    copy "%SCRIPT_DIR%\review_gate_v3_mcp.py" "!REVIEW_GATE_DIR!\" >nul
 ) else (
-    %log_error% MCP server file not found: %SCRIPT_DIR%\review_gate_v2_mcp.py%NC%
+    %log_error% MCP server file not found: %SCRIPT_DIR%\review_gate_v3_mcp.py%NC%
     pause
     exit /b 1
 )
@@ -169,9 +169,9 @@ if exist "!CURSOR_MCP_FILE!" (
 REM Create simplified MCP configuration without complex JSON parsing
 %log_progress% Creating MCP configuration...%NC%
 
-REM Create basic MCP configuration with Review Gate V2
+REM Create basic MCP configuration with Review Gate V3
 set "PYTHON_PATH=!REVIEW_GATE_DIR!\venv\Scripts\python.exe"
-set "MCP_SCRIPT_PATH=!REVIEW_GATE_DIR!\review_gate_v2_mcp.py"
+set "MCP_SCRIPT_PATH=!REVIEW_GATE_DIR!\review_gate_v3_mcp.py"
 
 REM Replace backslashes with forward slashes for JSON
 set "PYTHON_PATH_JSON=!PYTHON_PATH:\=/!"
@@ -182,7 +182,7 @@ REM Create MCP configuration file directly
 (
 echo {
 echo   "mcpServers": {
-echo     "review-gate-v2": {
+echo     "review-gate-v3": {
 echo       "command": "!PYTHON_PATH_JSON!",
 echo       "args": ["!MCP_SCRIPT_PATH_JSON!"],
 echo       "env": {
@@ -198,7 +198,7 @@ echo }
 if exist "!CURSOR_MCP_FILE!" (
     %log_success% MCP configuration updated successfully%NC%
     %log_header% Total MCP servers configured: 1%NC%
-    %log_step%   - review-gate-v2 (Review Gate V2)%NC%
+    %log_step%   - review-gate-v3 (Review Gate V3)%NC%
 ) else (
     %log_error% Failed to create MCP configuration%NC%
     if exist "!BACKUP_FILE!" (
@@ -220,15 +220,15 @@ timeout /t 1 /nobreak >nul 2>&1
 %log_warning% MCP server test skipped (manual verification required)%NC%
 
 REM Install Cursor extension
-set "EXTENSION_FILE=%SCRIPT_DIR%\cursor-extension\review-gate-v2-2.7.3.vsix"
+set "EXTENSION_FILE=%SCRIPT_DIR%\cursor-extension\review-gate-v3-2.7.3.vsix"
 if exist "!EXTENSION_FILE!" (
     %log_progress% Installing Cursor extension...%NC%
     copy "!EXTENSION_FILE!" "!REVIEW_GATE_DIR!\" >nul
-    
+
     REM Try automated installation first
     set "EXTENSION_INSTALLED=false"
     set "CURSOR_CMD="
-    
+
     REM Check for cursor command in various locations
     if exist "%ProgramFiles%\Cursor\resources\app\bin\cursor.cmd" (
         set "CURSOR_CMD=%ProgramFiles%\Cursor\resources\app\bin\cursor.cmd"
@@ -237,7 +237,7 @@ if exist "!EXTENSION_FILE!" (
     ) else if exist "%ProgramFiles(x86)%\Cursor\resources\app\bin\cursor.cmd" (
         set "CURSOR_CMD=%ProgramFiles(x86)%\Cursor\resources\app\bin\cursor.cmd"
     )
-    
+
     if defined CURSOR_CMD (
         %log_progress% Attempting automated extension installation...%NC%
         "!CURSOR_CMD!" --install-extension "!EXTENSION_FILE!" >nul 2>&1
@@ -248,7 +248,7 @@ if exist "!EXTENSION_FILE!" (
             %log_warning% Automated installation failed, falling back to manual method%NC%
         )
     )
-    
+
     REM If automated installation failed, provide manual instructions
     if "!EXTENSION_INSTALLED!" equ "false" (
         echo.
@@ -257,10 +257,10 @@ if exist "!EXTENSION_FILE!" (
         %log_step% 1. Open Cursor IDE%NC%
         %log_step% 2. Press Ctrl+Shift+P%NC%
         %log_step% 3. Type 'Extensions: Install from VSIX'%NC%
-        %log_step% 4. Select: !REVIEW_GATE_DIR!\review-gate-v2-2.7.3.vsix%NC%
+        %log_step% 4. Select: !REVIEW_GATE_DIR!\review-gate-v3-2.7.3.vsix%NC%
         %log_step% 5. Restart Cursor when prompted%NC%
         echo.
-        
+
         REM Try to open Cursor if available
         if exist "%ProgramFiles%\Cursor\Cursor.exe" (
             %log_progress% Opening Cursor IDE...%NC%
@@ -297,13 +297,13 @@ del /f /q "!TEMP_DIR!\review_gate_*" >nul 2>&1
 del /f /q "!TEMP_DIR!\mcp_response*" >nul 2>&1
 
 echo.
-%log_success% Review Gate V2 Installation Complete!%NC%
+%log_success% Review Gate V3 Installation Complete!%NC%
 %log_header%==========================================%NC%
 echo.
 %log_header% Installation Summary:%NC%
 %log_step%    - MCP Server: !REVIEW_GATE_DIR!%NC%
 %log_step%    - MCP Config: !CURSOR_MCP_FILE!%NC%
-%log_step%    - Extension: !REVIEW_GATE_DIR!\review-gate-v2-2.7.3.vsix%NC%
+%log_step%    - Extension: !REVIEW_GATE_DIR!\review-gate-v3-2.7.3.vsix%NC%
 %log_step%    - Global Rule: !CURSOR_RULES_DIR!\ReviewGate.mdc%NC%
 echo.
 %log_header% Testing Your Installation:%NC%
@@ -322,7 +322,7 @@ echo.
 %log_step%    - Images are included in response%NC%
 echo.
 %log_header% Troubleshooting:%NC%
-%log_info%    - Logs: type "!PYTHON_CMD! -c "import tempfile; print(tempfile.gettempdir())"\review_gate_v2.log"%NC%
+%log_info%    - Logs: type "!PYTHON_CMD! -c "import tempfile; print(tempfile.gettempdir())"\review_gate_v3.log"%NC%
 %log_info%    - Test SoX: sox --version%NC%
 %log_info%    - Browser Console: F12 in Cursor%NC%
 echo.
@@ -330,7 +330,7 @@ echo.
 
 REM Final verification
 %log_progress% Final verification...%NC%
-if exist "!REVIEW_GATE_DIR!\review_gate_v2_mcp.py" (
+if exist "!REVIEW_GATE_DIR!\review_gate_v3_mcp.py" (
     if exist "!CURSOR_MCP_FILE!" (
         if exist "!REVIEW_GATE_DIR!\venv" (
             %log_success% All components installed successfully%NC%

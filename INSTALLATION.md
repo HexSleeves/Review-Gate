@@ -32,7 +32,7 @@ Review Gate V3 is an MCP (Model Context Protocol) server that enables Cursor to 
 ```bash
 # Clone the repository
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Make installer executable
 chmod +x install.sh
@@ -46,7 +46,7 @@ chmod +x install.sh
 ```powershell
 # Clone the repository
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Enable script execution
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -60,7 +60,7 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ```cmd
 # Clone the repository
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate\V2
+cd Review-Gate\V3
 
 # Run installer
 install.bat
@@ -88,7 +88,7 @@ cd %USERPROFILE%\cursor-extensions\review-gate-v3
 
 ### Step 2: Copy Required Files
 
-Copy these files from the downloaded Review-Gate/V2 folder to your installation directory:
+Copy these files from the downloaded Review-Gate/V3 folder to your installation directory:
 
 - `review_gate_v3_mcp.py` - The MCP server
 - `requirements_simple.txt` - Python dependencies
@@ -238,7 +238,7 @@ python review_gate_v3_mcp.py
 
 1. Open Cursor
 2. Go to Extensions panel (Ctrl+Shift+X or Cmd+Shift+X)
-3. Look for "Review Gate V2" in installed extensions
+3. Look for "Review Gate V3" in installed extensions
 4. Ensure it's enabled
 
 ### Test 2: Manual Popup
@@ -294,7 +294,7 @@ type %TEMP%\review_gate_v3.log
 
 1. Check if extension is enabled:
    - Open Extensions panel
-   - Find Review Gate V2
+   - Find Review Gate V3
    - Click "Enable" if disabled
 
 2. Check browser console for errors:
@@ -404,7 +404,7 @@ Log file: %TEMP%\review_gate_v3.log
 **macOS/Linux:**
 
 ```bash
-cd Review-Gate/V2
+cd Review-Gate/V3
 chmod +x uninstall.sh
 ./uninstall.sh
 ```
@@ -412,7 +412,7 @@ chmod +x uninstall.sh
 **Windows:**
 
 ```cmd
-cd Review-Gate\V2
+cd Review-Gate\V3
 uninstall.bat
 ```
 
@@ -420,7 +420,7 @@ uninstall.bat
 
 1. Remove extension from Cursor:
    - Open Extensions panel
-   - Find Review Gate V2
+   - Find Review Gate V3
    - Click Uninstall
 
 2. Remove installation directory:

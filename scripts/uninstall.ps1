@@ -1,6 +1,6 @@
-# Review Gate V2 - Windows PowerShell Uninstallation Script
+# Review Gate V3 - Windows PowerShell Uninstallation Script
 # Author: Lakshman Turlapati
-# This script removes Review Gate V2 from Cursor IDE on Windows
+# This script removes Review Gate V3 from Cursor IDE on Windows
 
 # Enable strict error handling
 $ErrorActionPreference = "Stop"
@@ -14,13 +14,13 @@ function Write-Warning-Log { param([string]$Message) Write-Host "WARNING: $Messa
 function Write-Step-Log { param([string]$Message) Write-Host "$Message" -ForegroundColor White }
 function Write-Header-Log { param([string]$Message) Write-Host "$Message" -ForegroundColor Cyan }
 
-Write-Header-Log "Review Gate V2 - Windows Uninstallation"
+Write-Header-Log "Review Gate V3 - Windows Uninstallation"
 Write-Header-Log "======================================="
 Write-Host ""
 
 # Define paths
 $CursorExtensionsDir = Join-Path $env:USERPROFILE "cursor-extensions"
-$ReviewGateDir = Join-Path $CursorExtensionsDir "review-gate-v2"
+$ReviewGateDir = Join-Path $CursorExtensionsDir "review-gate-v3"
 $CursorMcpFile = Join-Path $env:USERPROFILE ".cursor\mcp.json"
 $CursorRulesDir = Join-Path $env:APPDATA "Cursor\User\rules"
 
@@ -41,26 +41,26 @@ if (Test-Path $ReviewGateDir) {
 # Remove from MCP configuration
 if (Test-Path $CursorMcpFile) {
     Write-Progress-Log "Removing from MCP configuration..."
-    
+
     # Backup current config
     $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
     $BackupFile = "$CursorMcpFile.backup_before_uninstall.$timestamp"
     Copy-Item $CursorMcpFile $BackupFile -Force
     Write-Info-Log "Backup created: $BackupFile"
-    
+
     try {
         $config = Get-Content $CursorMcpFile -Raw | ConvertFrom-Json
-        if ($config.mcpServers -and $config.mcpServers.PSObject.Properties.Name -contains "review-gate-v2") {
-            $config.mcpServers.PSObject.Properties.Remove("review-gate-v2")
-            
+        if ($config.mcpServers -and $config.mcpServers.PSObject.Properties.Name -contains "review-gate-v3") {
+            $config.mcpServers.PSObject.Properties.Remove("review-gate-v3")
+
             # If no servers left, create empty config
             if ($config.mcpServers.PSObject.Properties.Name.Count -eq 0) {
                 $config.mcpServers = @{}
             }
-            
+
             $config | ConvertTo-Json -Depth 10 | Set-Content $CursorMcpFile -Encoding UTF8
             Write-Success-Log "Removed from MCP configuration"
-            
+
             $remainingCount = $config.mcpServers.PSObject.Properties.Name.Count
             Write-Header-Log "Remaining MCP servers: $remainingCount"
         } else {
@@ -107,7 +107,7 @@ foreach ($cursorCmd in $cursorPaths) {
     if (Test-Path $cursorCmd) {
         Write-Progress-Log "Attempting automated extension removal..."
         try {
-            & $cursorCmd --uninstall-extension "review-gate-v2" | Out-Null
+            & $cursorCmd --uninstall-extension "review-gate-v3" | Out-Null
             Write-Success-Log "Extension removed automatically via command line"
             $ExtensionRemoved = $true
             break
@@ -131,7 +131,7 @@ if (-not $ExtensionRemoved) {
     Write-Host ""
 }
 
-Write-Success-Log "Review Gate V2 Uninstallation Complete!"
+Write-Success-Log "Review Gate V3 Uninstallation Complete!"
 Write-Header-Log "========================================="
 Write-Host ""
 Write-Header-Log "What was removed:"

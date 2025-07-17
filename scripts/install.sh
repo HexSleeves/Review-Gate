@@ -214,7 +214,7 @@ if has_existing and os.path.exists(config_file):
     except:
         existing_servers = {}
 
-# Add Review Gate V2 configuration
+# Add Review Gate V3 configuration
 existing_servers['review-gate-v3'] = {
     'command': os.path.join(review_gate_dir, 'venv/bin/python'),
     'args': [os.path.join(review_gate_dir, 'review_gate_v3_mcp.py')],
@@ -246,7 +246,7 @@ if python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1
     # Count configured servers (simplified)
     SERVER_COUNT=$(python3 -c "import json; print(len(json.load(open('$CURSOR_MCP_FILE')).get('mcpServers', {})))")
     log_step "Total MCP servers configured: $SERVER_COUNT"
-    log_step "  - review-gate-v3 (Review Gate V2)"
+    log_step "  - review-gate-v3 (Review Gate V3)"
 else
     log_error "Generated MCP configuration is invalid"
     if [[ -f "$BACKUP_FILE" ]]; then

@@ -1,10 +1,10 @@
 [![3OtOp7R.th.png](https://iili.io/3OtOp7R.th.png)](https://freeimage.host/i/3OtOp7R)
 
-# Review Gate V2 for Cursor IDE ゲート
+# Review Gate V3 for Cursor IDE ゲート
 
 **Cursor** would often drop the mic 🎤 way too early! I'd give it a complex task, it'd use maybe 5 of its ~25 available tool calls for that single "main request," then call it a day. Not only was that untapped AI power for that *single thought*, but making small follow-up tweaks meant starting a *new request*. Doing that too often, and my precious **~500 monthly requests** (you know the ones!) would burn up much faster than I liked :(
 
-**Presenting: The Review Gate V2 – The "Turn Your 500 Cursor Requests into 2500!" Rule with Voice & Vision!**
+**Presenting: The Review Gate V3 – The "Turn Your 500 Cursor Requests into 2500!" Rule with Voice & Vision!**
 (Okay, maybe not *always* a perfect 5x, but you get the damn idea! 😉)
 
 I evolved this Global Rule for our beloved Cursor IDE to transform my (and your!) AI from a quick sprinter into an endurance marathon runner for complex ideas, all within the lifecycle of a *single main request*. But now it's **supercharged with voice commands, image uploads, and a beautiful popup interface!** I've basically told Cursor: "Hold up, *we're* not done with this request until *I* say we're done." Before it dares to end the conversation, it *must* open a special **interactive popup** for my (and your!) final, iterative commands with full multi-modal support.
@@ -13,9 +13,9 @@ If each main request can now handle the depth of what might have taken 5 separat
 
 ## 🎬 Quick Demo
 
-**See Review Gate V2 in action!** → <https://www.youtube.com/watch?v=mZmNM-AIf4M>
+**See Review Gate V3 in action!** → <https://www.youtube.com/watch?v=mZmNM-AIf4M>
 
-## ✨ Key Awesomeness (What V2 Packs In)
+## ✨ Key Awesomeness (What V3 Packs In)
 
 * **🎤 Voice-Activated AI Control:** Speak your sub-prompts directly! Click the mic, speak naturally, and watch your words transcribe automatically using local Faster-Whisper AI.
 * **📷 Visual Context Sharing:** Upload images, screenshots, diagrams, or mockups directly in the popup. The AI sees everything you share.
@@ -26,11 +26,11 @@ If each main request can now handle the depth of what might have taken 5 separat
 * **MCP Integration Magic:** Built on the Model Context Protocol for seamless Cursor integration. The popup automatically appears when needed.
 * **Cross-Platform Speech:** Whisper speech-to-text works flawlessly on macOS and is implemented for Windows, though Windows support hasn't been extensively tested (take it with a grain of salt!).
 
-## 🛠️ The Guts (How V2 Works, Even Better)
+## 🛠️ The Guts (How V3 Works, Even Better)
 
 1. **You (or I):** Give Cursor a task (this counts as 1 main request towards your ~500).
 2. **Cursor AI:** Does its main job (coding, analysis, maybe a few tool calls from the ~25 for this request).
-3. **Review Gate V2 Kicks In (The Magic Part I Evolved!):**
+3. **Review Gate V3 Kicks In (The Magic Part I Evolved!):**
     * AI calls the `review_gate_chat` MCP tool automatically
     * Beautiful popup appears in Cursor with multi-modal input options
     * AI announces it's waiting for your input in the popup
@@ -43,7 +43,7 @@ If each main request can now handle the depth of what might have taken 5 separat
     Reads your popup input (text, speech, images), acts on it (more coding, *more tool calls from the original budget*!), responds in the main chat, then opens the popup again for your *next* input.
 6. **Loop!** This continues, deepening the work on your original request, until you type `TASK_COMPLETE` in the popup.
 
-## 🚀 Get It Going (V2 Installation)
+## 🚀 Get It Going (V3 Installation)
 
 **Two simple steps to supercharge your Cursor workflow:**
 
@@ -52,9 +52,9 @@ If each main request can now handle the depth of what might have taken 5 separat
 #### macOS Installation (Fully Tested ✅)
 
 ```bash
-# Clone repository and navigate to V2 subdirectory
+# Clone repository and navigate to V3 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Run the magical one-click installer
 ./install.sh
@@ -65,9 +65,9 @@ cd Review-Gate/V2
 **PowerShell (Recommended):**
 
 ```powershell
-# Clone repository and navigate to V2 subdirectory
+# Clone repository and navigate to V3 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Run PowerShell installer (may need admin privileges)
 ./install.ps1
@@ -76,9 +76,9 @@ cd Review-Gate/V2
 **Command Prompt (Alternative):**
 
 ```cmd
-# Clone repository and navigate to V2 subdirectory
+# Clone repository and navigate to V3 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+cd Review-Gate/V3
 
 # Run batch installer
 install.bat
@@ -91,7 +91,7 @@ The installer automatically handles:
 * ✅ **Extension**: Cursor extension for the popup interface
 * ✅ **Configuration**: MCP integration setup with safe merging of existing configurations
 
-### Step 2: Copy the V2 Rule to Cursor
+### Step 2: Copy the V3 Rule to Cursor
 
 **CRITICAL STEP**: For the Review Gate V3 to work, you need to copy the V3 rule to your Cursor settings:
 
@@ -124,7 +124,7 @@ After both steps are complete:
 
 ## ⚠️ Heads Up! (My Friendly V3 Warnings)
 
-* **EXPERIMENTAL EVOLUTION!** This is V2 of my power-user move. It works because we're very cleverly instructing the AI with MCP integration.
+* **EXPERIMENTAL EVOLUTION!** This is V3 of my power-user move. It works because we're very cleverly instructing the AI with MCP integration.
 * **MCP SERVER RUNS LOCALLY:** The rule uses a local MCP server that integrates with Cursor. The installer sets this up automatically.
 * **SPEECH PROCESSING IS LOCAL:** Your voice is processed locally using Faster-Whisper AI - nothing goes to the cloud.
 * **PLATFORM COMPATIBILITY:**
@@ -172,7 +172,7 @@ After both steps are complete:
 
 ```bash
 # Check if MCP server is running
-tail -f /tmp/review_gate_v2.log
+tail -f /tmp/review_gate_v3.log
 
 # Test speech recording capability
 sox --version
@@ -191,7 +191,7 @@ cat ~/.cursor/mcp.json
 ## 🗂️ V3 Files & Structure
 
 ```bash
-V2/
+V3/
 ├── cursor-extension/           # Cursor extension source
 │   ├── extension.js           # Main extension file
 │   ├── package.json           # Extension manifest
@@ -211,13 +211,13 @@ V2/
 
 ## 🎉 Why V3? You Asked For It
 
-After the original Review Gate gained **100+ forks**, **900+ stars**, **100,000+ impressions**, and countless requests to evolve it further - **you asked for it, I delivered!** The community response was incredible, and the demand for voice commands, visual context, and a more sophisticated interface was overwhelming. V2 is my answer to every single feature request and improvement suggestion.
+After the original Review Gate gained **100+ forks**, **900+ stars**, **100,000+ impressions**, and countless requests to evolve it further - **you asked for it, I delivered!** The community response was incredible, and the demand for voice commands, visual context, and a more sophisticated interface was overwhelming. V3 is my answer to every single feature request and improvement suggestion.
 
 ## 🧑‍💻 About Me & This V3 Evolution
 
-This "Review Gate V2" represents the evolution of my original terminal-based rule into a full-featured, multi-modal interaction system. It was born from my own desire to truly partner with Cursor's AI using not just text, but voice commands and visual context. My goal remains the same: to make every interaction as deep and complete as possible—and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold!
+This "Review Gate V3" represents the evolution of my original terminal-based rule into a full-featured, multi-modal interaction system. It was born from my own desire to truly partner with Cursor's AI using not just text, but voice commands and visual context. My goal remains the same: to make every interaction as deep and complete as possible—and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold!
 
-The V2 system leverages the Model Context Protocol (MCP) to create a seamless bridge between Cursor's AI and a rich, interactive popup interface. Whether you're speaking commands, sharing screenshots, or typing follow-ups, it's all designed to keep you in the flow while maximizing the value of each Cursor request.
+The V3 system leverages the Model Context Protocol (MCP) to create a seamless bridge between Cursor's AI and a rich, interactive popup interface. Whether you're speaking commands, sharing screenshots, or typing follow-ups, it's all designed to keep you in the flow while maximizing the value of each Cursor request.
 
 To connect with me or learn more about my work, visit: [www.audienclature.com](https://www.audienclature.com)
 

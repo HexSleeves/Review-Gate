@@ -1579,7 +1579,7 @@ export class ReviewGateService extends BaseService {
             <div class="review-title">${title}</div>
             <div class="status-indicator" id="statusIndicator"></div>
             <div class="mcp-status" id="mcpStatus">Checking MCP...</div>
-            <div class="review-author">by Lakshman Turlapati</div>
+            <div class="review-author">by Lakshman Turlapati & HexSleeves</div>
         </div>
 
         <div class="messages-container" id="messages">

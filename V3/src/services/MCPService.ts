@@ -258,7 +258,7 @@ export class MCPService extends BaseService {
       this.mcpMetrics.statusChecks++;
 
       try {
-        const mcpLogPath = this.getTempPath("review_gate_v2.log");
+        const mcpLogPath = this.getTempPath("review_gate_v3.log");
         const cacheKey = `status_${mcpLogPath}`;
 
         // Check cache first
@@ -424,7 +424,7 @@ export class MCPService extends BaseService {
    * Setup file system watchers for MCP status monitoring
    */
   private async setupFileWatchers(): Promise<void> {
-    const mcpLogPath = this.getTempPath("review_gate_v2.log");
+    const mcpLogPath = this.getTempPath("review_gate_v3.log");
 
     try {
       // Ensure directory exists
