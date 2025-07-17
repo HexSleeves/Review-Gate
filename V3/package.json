@@ -1,0 +1,121 @@
+{
+  "name": "review-gate-v3",
+  "displayName": "Review Gate V3",
+  "publisher": "review-gate-v3",
+  "description": "Performance-optimized Review Gate V3 with lazy loading and efficient file operations",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "performance",
+    "optimization",
+    "lazy-loading",
+    "file-operations",
+    "cursor"
+  ],
+  "activationEvents": [
+    "onCommand:review-gate-v3.helloWorld",
+    "onFileSystem:file",
+    "onView:explorer"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "review-gate-v3.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "configuration": {
+      "title": "Review Gate V3",
+      "properties": {
+        "review-gate-v3.performance.mcpStatusPollingInterval": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 1000,
+          "maximum": 60000,
+          "description": "Interval in milliseconds for MCP status polling (1000-60000ms)"
+        },
+        "review-gate-v3.performance.reviewGatePollingInterval": {
+          "type": "number",
+          "default": 3000,
+          "minimum": 1000,
+          "maximum": 30000,
+          "description": "Interval in milliseconds for Review Gate trigger polling (1000-30000ms)"
+        },
+        "review-gate-v3.performance.useFileWatcher": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use efficient file watchers instead of polling for file changes"
+        },
+        "review-gate-v3.performance.enableLazyLoading": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable lazy loading of extension components for better startup performance"
+        },
+        "review-gate-v3.performance.logLevel": {
+          "type": "string",
+          "enum": [
+            "error",
+            "warn",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "description": "Logging level for performance monitoring"
+        },
+        "review-gate-v3.performance.enablePerformanceMonitoring": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable detailed performance monitoring and metrics collection"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "pnpm run package",
+    "compile": "pnpm run check-types && pnpm run lint && node esbuild.js",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "pnpm run check-types && pnpm run lint && node esbuild.js --production --tree-shaking",
+    "package:vscode": "vsce package",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "pnpm run compile-tests && pnpm run compile && pnpm run lint",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\"",
+    "perf:test": "node -e \"console.log('Performance benchmarking not yet implemented')\"",
+    "bundle:analyze": "node esbuild.js --production --analyze",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3"
+  },
+  "devDependencies": {
+    "@jest/globals": "^30.0.4",
+    "@jest/types": "^30.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "24.x",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^8.37.0",
+    "@typescript-eslint/parser": "^8.37.0",
+    "@vscode/test-cli": "^0.0.11",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^2.32.0",
+    "esbuild": "^0.25.6",
+    "eslint": "^9.31.0",
+    "jest": "^30.0.4",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.6.2",
+    "ts-jest": "^29.4.0",
+    "typescript": "^5.8.3"
+  }
+}

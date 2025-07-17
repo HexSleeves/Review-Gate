@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "review-gate-v3": {
+      "command": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3/venv/bin/python",
+      "args": [
+        "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3/review_gate_v3_mcp.py"
+      ],
+      "env": {
+        "PYTHONPATH": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3",
+        "PYTHONUNBUFFERED": "1",
+        "REVIEW_GATE_MODE": "cursor_integration"
+      }
+    }
+  }
+}

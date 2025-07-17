@@ -340,7 +340,7 @@ dist/
 *.tar.gz
 *.rar
 *.7z
-*.claude 
+*.claude
 *CLAUDE.md
 *.cursor
 # Compiled files
