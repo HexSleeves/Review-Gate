@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """
-Review Gate 2.0 - Advanced MCP Server with Cursor Integration
+Review Gate V3 - Advanced MCP Server with Cursor Integration
 Author: Lakshman Turlapati & HexSleeves
 Provides popup chat, quick input, and file picker tools that automatically trigger Cursor extension.
+
+Features:
+- Secure input validation and sanitization
+- Configurable timeouts and polling intervals
+- Cross-platform compatibility
+- Structured logging
+- Resource management with context managers
+- Simplified error handling
 
 Requirements:
 - mcp>=1.9.2 (latest stable version)
@@ -18,6 +26,8 @@ import time
 import uuid
 import glob
 import tempfile
+import re
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
@@ -53,6 +63,105 @@ def get_temp_path(filename: str) -> str:
         temp_dir = '/tmp'
     return os.path.join(temp_dir, filename)
 
+def sanitize_input(input_text: str, max_length: int = None) -> str:
+    """Sanitize user input to prevent injection attacks and ensure reasonable length"""
+    if not isinstance(input_text, str):
+        return ""
+    
+    # Use default max_length if not provided
+    if max_length is None:
+        max_length = 10000
+    
+    # Remove null bytes and other problematic characters
+    sanitized = input_text.replace('\0', '').replace('\r', '\n')
+    
+    # Limit length to prevent DoS attacks
+    if len(sanitized) > max_length:
+        sanitized = sanitized[:max_length] + "...[truncated]"
+    
+    # Remove potential script injection patterns
+    sanitized = re.sub(r'<script[^>]*>.*?</script>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+    sanitized = re.sub(r'javascript:', '', sanitized, flags=re.IGNORECASE)
+    
+    return sanitized.strip()
+
+def validate_filename(filename: str, max_length: int = None) -> str:
+    """Validate and sanitize filename to prevent path traversal attacks"""
+    if not isinstance(filename, str):
+        return "unknown"
+    
+    # Use default max_length if not provided
+    if max_length is None:
+        max_length = 255
+    
+    # Remove path traversal attempts
+    sanitized = filename.replace('..', '').replace('/', '').replace('\\', '')
+    
+    # Remove problematic characters
+    sanitized = re.sub(r'[<>:"|?*]', '', sanitized)
+    
+    # Ensure it's not empty and not too long
+    if not sanitized or len(sanitized) > max_length:
+        sanitized = f"file_{int(time.time())}"
+    
+    return sanitized
+
+@contextmanager
+def safe_file_operation(file_path: str, mode: str = 'r', encoding: str = 'utf-8'):
+    """Context manager for safe file operations with proper error handling and cleanup"""
+    file_obj = None
+    try:
+        file_obj = open(file_path, mode, encoding=encoding)
+        yield file_obj
+    except (IOError, OSError) as e:
+        logger.error(f"❌ File operation failed for {file_path}: {e}")
+        raise
+    finally:
+        if file_obj:
+            try:
+                file_obj.close()
+            except Exception as e:
+                logger.warning(f"⚠️ Error closing file {file_path}: {e}")
+
+@contextmanager
+def safe_temp_file(prefix: str = "review_gate_", suffix: str = ".tmp", content: str = None):
+    """Context manager for safe temporary file operations"""
+    temp_file = None
+    temp_path = None
+    try:
+        # Create temporary file
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w+',
+            prefix=prefix,
+            suffix=suffix,
+            delete=False,
+            encoding='utf-8'
+        )
+        temp_path = temp_file.name
+        
+        if content:
+            temp_file.write(content)
+            temp_file.flush()
+        
+        yield temp_file, temp_path
+    except Exception as e:
+        logger.error(f"❌ Temporary file operation failed: {e}")
+        raise
+    finally:
+        # Clean up temporary file
+        if temp_file:
+            try:
+                temp_file.close()
+            except Exception as e:
+                logger.warning(f"⚠️ Error closing temp file: {e}")
+        
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.unlink(temp_path)
+                logger.debug(f"🗑️ Cleaned up temp file: {temp_path}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error cleaning up temp file {temp_path}: {e}")
+
 # Configure logging with immediate flush
 log_file_path = get_temp_path('review_gate_v3.log')
 
@@ -74,19 +183,54 @@ handlers.append(stderr_handler)
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(funcName)s:%(lineno)d] - %(message)s',
     handlers=handlers
 )
 logger = logging.getLogger(__name__)
-logger.info(f"🔧 Log file path: {log_file_path}")
+
+def log_structured(level, event, **kwargs):
+    """Log structured messages with consistent formatting"""
+    message_parts = [f"EVENT:{event}"]
+    
+    for key, value in kwargs.items():
+        if isinstance(value, str) and len(value) > 100:
+            value = value[:100] + "...[truncated]"
+        message_parts.append(f"{key}={value}")
+    
+    message = " | ".join(message_parts)
+    logger.log(level, message)
+
+# Log startup information
+log_structured(logging.INFO, "SERVER_STARTUP", log_file=log_file_path)
 
 # Force immediate log flushing
 for handler in logger.handlers:
     if hasattr(handler, 'flush'):
         handler.flush()
 
+class ReviewGateConfig:
+    """Configuration class for Review Gate server"""
+    def __init__(self):
+        # Timeout configurations (in seconds)
+        self.CHAT_TIMEOUT = int(os.getenv("REVIEW_GATE_CHAT_TIMEOUT", "300"))  # 5 minutes
+        self.QUICK_TIMEOUT = int(os.getenv("REVIEW_GATE_QUICK_TIMEOUT", "90"))  # 1.5 minutes
+        self.FILE_TIMEOUT = int(os.getenv("REVIEW_GATE_FILE_TIMEOUT", "90"))  # 1.5 minutes
+        self.INGEST_TIMEOUT = int(os.getenv("REVIEW_GATE_INGEST_TIMEOUT", "120"))  # 2 minutes
+        self.SHUTDOWN_TIMEOUT = int(os.getenv("REVIEW_GATE_SHUTDOWN_TIMEOUT", "60"))  # 1 minute
+        self.ACK_TIMEOUT = int(os.getenv("REVIEW_GATE_ACK_TIMEOUT", "30"))  # 30 seconds
+        
+        # Polling intervals (in seconds)
+        self.POLL_INTERVAL = float(os.getenv("REVIEW_GATE_POLL_INTERVAL", "0.5"))  # 500ms
+        self.SPEECH_POLL_INTERVAL = float(os.getenv("REVIEW_GATE_SPEECH_POLL_INTERVAL", "1.0"))  # 1 second
+        self.HEARTBEAT_INTERVAL = int(os.getenv("REVIEW_GATE_HEARTBEAT_INTERVAL", "30"))  # 30 seconds
+        
+        # Input validation
+        self.MAX_INPUT_LENGTH = int(os.getenv("REVIEW_GATE_MAX_INPUT_LENGTH", "10000"))
+        self.MAX_FILENAME_LENGTH = int(os.getenv("REVIEW_GATE_MAX_FILENAME_LENGTH", "255"))
+
 class ReviewGateServer:
     def __init__(self):
+        self.config = ReviewGateConfig()
         self.server = Server("review-gate-v3")
         self.setup_handlers()
         self.shutdown_requested = False
@@ -106,67 +250,55 @@ class ReviewGateServer:
         # Start speech trigger monitoring
         self._start_speech_monitoring()
 
-        logger.info("🚀 Review Gate 2.0 server initialized by Lakshman Turlapati for Cursor integration")
+        log_structured(logging.INFO, "SERVER_INITIALIZED", 
+                      whisper_available=WHISPER_AVAILABLE, 
+                      whisper_error=self._whisper_error,
+                      speech_monitoring=hasattr(self, '_speech_monitoring_active'))
         # Ensure log is written immediately
         for handler in logger.handlers:
             if hasattr(handler, 'flush'):
                 handler.flush()
 
     def _initialize_whisper_model(self):
-        """Initialize Whisper model with comprehensive error handling and fallbacks"""
+        """Initialize Whisper model with simplified error handling"""
         try:
             logger.info("🎤 Loading Faster-Whisper model for speech-to-text...")
 
-            # Try different model configurations in order of preference
+            # Try models in order of preference (smaller models first for better compatibility)
             model_configs = [
-                {"model": "base", "device": "cpu", "compute_type": "int8"},
                 {"model": "tiny", "device": "cpu", "compute_type": "int8"},
-                {"model": "base", "device": "cpu", "compute_type": "float32"},
+                {"model": "base", "device": "cpu", "compute_type": "int8"},
                 {"model": "tiny", "device": "cpu", "compute_type": "float32"},
             ]
 
-            for i, config in enumerate(model_configs):
+            for config in model_configs:
                 try:
-                    logger.info(f"🔄 Attempting to load {config['model']} model (attempt {i+1}/{len(model_configs)})")
+                    logger.info(f"🔄 Attempting to load {config['model']} model")
                     model = WhisperModel(config['model'], device=config['device'], compute_type=config['compute_type'])
-
-                    # Test the model with a quick inference to ensure it works
-                    logger.info(f"✅ Successfully loaded {config['model']} model with {config['compute_type']}")
-                    logger.info(f"📊 Model info - Device: {config['device']}, Compute: {config['compute_type']}")
+                    logger.info(f"✅ Successfully loaded {config['model']} model")
                     return model
 
                 except Exception as model_error:
                     logger.warning(f"⚠️ Failed to load {config['model']} model: {model_error}")
-                    if i == len(model_configs) - 1:
-                        # This was the last attempt
-                        raise model_error
                     continue
 
-        except ImportError as import_error:
-            error_msg = f"faster-whisper import failed: {import_error}"
-            logger.error(f"❌ {error_msg}")
-            self._whisper_error = error_msg
-            return None
+            # If all models failed, raise the last error
+            raise Exception("All Whisper model configurations failed")
 
         except Exception as e:
             error_msg = f"Whisper model initialization failed: {e}"
             logger.error(f"❌ {error_msg}")
-
-            # Check for common issues and provide specific guidance
-            if "CUDA" in str(e):
-                logger.error("💡 CUDA issue detected - make sure you have CPU-only version")
-                logger.error("💡 Try: pip uninstall faster-whisper && pip install faster-whisper")
-                error_msg += " (CUDA compatibility issue)"
-            elif "Visual Studio" in str(e) or "MSVC" in str(e):
-                logger.error("💡 Visual C++ issue detected on Windows")
-                logger.error("💡 Install Visual Studio Build Tools or use pre-built wheels")
-                error_msg += " (Visual C++ dependency missing)"
-            elif "Permission" in str(e):
+            
+            # Provide basic guidance for common issues
+            error_str = str(e).lower()
+            if "cuda" in error_str:
+                logger.error("💡 CUDA issue - try: pip install faster-whisper --no-deps")
+            elif "visual studio" in error_str or "msvc" in error_str:
+                logger.error("💡 Visual C++ dependency missing - install Visual Studio Build Tools")
+            elif "permission" in error_str:
                 logger.error("💡 Permission issue - check file access and antivirus")
-                error_msg += " (Permission denied)"
-            elif "disk space" in str(e).lower() or "no space" in str(e).lower():
-                logger.error("💡 Disk space issue - whisper models require storage")
-                error_msg += " (Insufficient disk space)"
+            elif "disk space" in error_str or "no space" in error_str:
+                logger.error("💡 Insufficient disk space for model download")
 
             self._whisper_error = error_msg
             return None
@@ -215,8 +347,7 @@ class ReviewGateServer:
         @self.server.call_tool()
         async def call_tool(name: str, arguments: dict):
             """Handle tool calls from Cursor Agent with immediate activation"""
-            logger.info(f"🎯 CURSOR AGENT CALLED TOOL: {name}")
-            logger.info(f"📋 Tool arguments: {arguments}")
+            log_structured(logging.INFO, "TOOL_CALL", tool_name=name, arguments=str(arguments))
 
             # Add processing delay to ensure proper handling
             await asyncio.sleep(0.5)  # Wait 500ms for proper processing
@@ -241,80 +372,14 @@ class ReviewGateServer:
                 await asyncio.sleep(1.0)  # Wait 1 second before error response
                 return [TextContent(type="text", text=f"ERROR: Tool {name} failed: {str(e)}")]
 
-    async def _handle_unified_review_gate(self, args: dict) -> list[TextContent]:
-        """Handle unified Review Gate tool for all user interaction needs"""
-        message = args.get("message", "Please provide your input:")
-        title = args.get("title", "Review Gate ゲート v3")
-        context = args.get("context", "")
-        mode = args.get("mode", "chat")
-        urgent = args.get("urgent", False)
-        timeout = args.get("timeout", 300)  # Default 5 minutes
-
-        logger.info(f"🎯 UNIFIED Review Gate activated - Mode: {mode}")
-        logger.info(f"📝 Title: {title}")
-        logger.info(f"📄 Message: {message}")
-        logger.info(f"⏱️ Timeout: {timeout}s")
-
-        # Create trigger file for Cursor extension IMMEDIATELY
-        trigger_id = f"unified_{mode}_{int(time.time() * 1000)}"
-
-        # Adapt the tool name based on mode for compatibility
-        tool_name = "review_gate"
-        if mode == "quick":
-            tool_name = "quick_review"
-        elif mode == "file":
-            tool_name = "file_review"
-        elif mode == "ingest":
-            tool_name = "ingest_text"
-        elif mode == "confirm":
-            tool_name = "shutdown_mcp"
-
-        # Force immediate trigger creation
-        success = await self._trigger_cursor_popup_immediately({
-            "tool": tool_name,
-            "message": message,
-            "title": title,
-            "context": context,
-            "urgent": urgent,
-            "mode": mode,
-            "trigger_id": trigger_id,
-            "timestamp": datetime.now().isoformat(),
-            "immediate_activation": True,
-            "unified_tool": True
-        })
-
-        if success:
-            logger.info(f"🔥 UNIFIED POPUP TRIGGERED - waiting for user input (trigger_id: {trigger_id}, mode: {mode})")
-
-            # Wait for user input with specified timeout
-            user_input = await self._wait_for_user_input(trigger_id, timeout=timeout)
-
-            if user_input:
-                # Return user input directly to MCP client with mode context
-                logger.info(f"✅ RETURNING USER INPUT TO MCP CLIENT: {user_input[:100]}...")
-                result_message = f"✅ User Response (Mode: {mode})\n\n"
-                result_message += f"💬 Input: {user_input}\n"
-                result_message += f"📝 Request: {message}\n"
-                result_message += f"📍 Context: {context}\n"
-                result_message += f"⚙️ Mode: {mode}\n"
-                result_message += f"🚨 Urgent: {urgent}\n\n"
-                result_message += f"🎯 User interaction completed successfully via unified Review Gate tool."
-
-                return [TextContent(type="text", text=result_message)]
-            else:
-                response = f"TIMEOUT: No user input received within {timeout} seconds (Mode: {mode})"
-                logger.warning(f"⚠️ Unified Review Gate timed out waiting for user input after {timeout} seconds")
-                return [TextContent(type="text", text=response)]
-        else:
-            response = f"ERROR: Failed to trigger unified Review Gate popup (Mode: {mode})"
-            return [TextContent(type="text", text=response)]
 
     async def _handle_review_gate_chat(self, args: dict) -> list[TextContent]:
         """Handle Review Gate chat popup and wait for user input with 5 minute timeout"""
-        message = args.get("message", "Please provide your review or feedback:")
-        title = args.get("title", "Review Gate V3 - ゲート")
-        context = args.get("context", "")
-        urgent = args.get("urgent", False)
+        # Sanitize inputs to prevent injection attacks
+        message = sanitize_input(args.get("message", "Please provide your review or feedback:"), self.config.MAX_INPUT_LENGTH)
+        title = sanitize_input(args.get("title", "Review Gate V3 - ゲート"), self.config.MAX_INPUT_LENGTH)
+        context = sanitize_input(args.get("context", ""), self.config.MAX_INPUT_LENGTH)
+        urgent = bool(args.get("urgent", False))
 
         logger.info(f"💬 ACTIVATING Review Gate chat popup IMMEDIATELY for Cursor Agent")
         logger.info(f"📝 Title: {title}")
@@ -339,22 +404,26 @@ class ReviewGateServer:
             logger.info(f"🔥 POPUP TRIGGERED IMMEDIATELY - waiting for user input (trigger_id: {trigger_id})")
 
             # Wait for extension acknowledgement first
-            ack_received = await self._wait_for_extension_acknowledgement(trigger_id, timeout=30)
+            ack_received = await self._wait_for_extension_acknowledgement(trigger_id, timeout=self.config.ACK_TIMEOUT)
             if ack_received:
                 logger.info("📨 Extension acknowledged popup activation")
             else:
                 logger.warning("⚠️ No extension acknowledgement received - popup may not have opened")
 
-            # Wait for user input from the popup with 5 MINUTE timeout
-            logger.info("⏳ Waiting for user input for up to 5 minutes...")
-            user_input = await self._wait_for_user_input(trigger_id, timeout=300)  # 5 MINUTE timeout
+            # Wait for user input from the popup
+            logger.info(f"⏳ Waiting for user input for up to {self.config.CHAT_TIMEOUT} seconds...")
+            user_input = await self._wait_for_user_input(trigger_id, timeout=self.config.CHAT_TIMEOUT)
 
             if user_input:
-                # Return user input directly to MCP client
-                logger.info(f"✅ RETURNING USER REVIEW TO MCP CLIENT: {user_input[:100]}...")
+                # Sanitize user input before processing
+                sanitized_input = sanitize_input(user_input)
+                log_structured(logging.INFO, "USER_INPUT_RECEIVED", 
+                              trigger_id=trigger_id, 
+                              input_length=len(sanitized_input),
+                              has_attachments=bool(hasattr(self, '_last_attachments') and self._last_attachments))
 
                 # Check for images in the last response data
-                response_content = [TextContent(type="text", text=f"User Response: {user_input}")]
+                response_content = [TextContent(type="text", text=f"User Response: {sanitized_input}")]
 
                 # If we have stored attachment data, include images
                 if hasattr(self, '_last_attachments') and self._last_attachments:
@@ -367,7 +436,8 @@ class ReviewGateServer:
                                     mimeType=attachment['mimeType']
                                 )
                                 response_content.append(image_content)
-                                logger.info(f"📸 Added image to response: {attachment.get('fileName', 'unknown')}")
+                                safe_filename = validate_filename(attachment.get('fileName', 'unknown'))
+                                logger.info(f"📸 Added image to response: {safe_filename}")
                             except Exception as e:
                                 logger.error(f"❌ Error adding image to response: {e}")
 
@@ -646,13 +716,14 @@ class ReviewGateServer:
         logger.info(f"🔍 Monitoring for extension acknowledgement: {ack_file}")
 
         start_time = time.time()
-        check_interval = 0.1  # Check every 100ms for fast response
+        check_interval = self.config.POLL_INTERVAL
 
         while time.time() - start_time < timeout:
             try:
                 if ack_file.exists():
-                    data = json.loads(ack_file.read_text())
-                    ack_status = data.get("acknowledged", False)
+                    with safe_file_operation(str(ack_file), mode='r') as f:
+                        data = json.load(f)
+                        ack_status = data.get("acknowledged", False)
 
                     # Clean up acknowledgement file immediately
                     try:
@@ -688,7 +759,7 @@ class ReviewGateServer:
         logger.info(f"🔍 Trigger ID: {trigger_id}")
 
         start_time = time.time()
-        check_interval = 0.1  # Check every 100ms for faster response
+        check_interval = self.config.POLL_INTERVAL
 
         while time.time() - start_time < timeout:
             try:
@@ -696,8 +767,9 @@ class ReviewGateServer:
                 for response_file in response_patterns:
                     if response_file.exists():
                         try:
-                            file_content = response_file.read_text().strip()
-                            logger.info(f"📄 Found response file {response_file}: {file_content[:200]}...")
+                            with safe_file_operation(str(response_file), mode='r') as f:
+                                file_content = f.read().strip()
+                                logger.info(f"📄 Found response file {response_file}: {file_content[:200]}...")
 
                             # Handle JSON format
                             if file_content.startswith('{'):
@@ -719,7 +791,8 @@ class ReviewGateServer:
                                     attachment_descriptions = []
                                     for att in attachments:
                                         if att.get('mimeType', '').startswith('image/'):
-                                            attachment_descriptions.append(f"Image: {att.get('fileName', 'unknown')}")
+                                            safe_filename = validate_filename(att.get('fileName', 'unknown'))
+                                            attachment_descriptions.append(f"Image: {safe_filename}")
 
                                     if attachment_descriptions:
                                         user_input += f"\n\nAttached: {', '.join(attachment_descriptions)}"
@@ -781,8 +854,11 @@ class ReviewGateServer:
 
             logger.info(f"🎯 CREATING trigger file with data: {json.dumps(trigger_data, indent=2)}")
 
-            # Write trigger file with immediate flush
-            trigger_file.write_text(json.dumps(trigger_data, indent=2))
+            # Write trigger file with context manager for safe operation
+            with safe_file_operation(str(trigger_file), mode='w') as f:
+                json.dump(trigger_data, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
 
             # Verify file was written successfully
             if not trigger_file.exists():
@@ -799,14 +875,15 @@ class ReviewGateServer:
                 logger.info(f"✅ Trigger file was consumed immediately by extension: {trigger_file}")
                 file_size = len(json.dumps(trigger_data, indent=2))
 
-            # Force file system sync with retry
-            for attempt in range(3):
-                try:
-                    os.sync()
-                    break
-                except Exception as sync_error:
-                    logger.warning(f"⚠️ Sync attempt {attempt + 1} failed: {sync_error}")
-                    await asyncio.sleep(0.1)  # Wait 100ms between attempts
+            # Force file system sync with cross-platform compatibility
+            try:
+                # Use fsync on the file descriptor for better cross-platform support
+                with open(trigger_file, 'r') as f:
+                    os.fsync(f.fileno())
+            except (OSError, AttributeError) as sync_error:
+                # fsync may not be available on all platforms or file systems
+                logger.debug(f"File sync not available: {sync_error}")
+                await asyncio.sleep(0.1)  # Small delay to ensure file is written
 
             logger.info(f"🔥 IMMEDIATE trigger created for Cursor: {trigger_file}")
             logger.info(f"📁 Trigger file path: {trigger_file.absolute()}")
@@ -865,7 +942,8 @@ class ReviewGateServer:
                     "mcp_integration": True,
                     "immediate_activation": True
                 }
-                backup_trigger.write_text(json.dumps(backup_data, indent=2))
+                with safe_file_operation(str(backup_trigger), mode='w') as f:
+                    json.dump(backup_data, f, indent=2)
 
             logger.info("🔄 Backup trigger files created for reliability")
 
@@ -921,8 +999,8 @@ class ReviewGateServer:
 
         while not self.shutdown_requested:
             try:
-                # Update log every 10 seconds to keep file modification time fresh
-                await asyncio.sleep(10)
+                # Update log to keep file modification time fresh
+                await asyncio.sleep(self.config.HEARTBEAT_INTERVAL)
                 heartbeat_count += 1
 
                 # Write heartbeat to log
@@ -1047,7 +1125,7 @@ class ReviewGateServer:
                             except:
                                 pass
 
-                    time.sleep(0.5)  # Check every 500ms
+                    time.sleep(self.config.SPEECH_POLL_INTERVAL)  # Configurable speech polling interval
 
                 except Exception as e:
                     logger.error(f"❌ Critical speech monitoring error: {e}")
@@ -1146,7 +1224,7 @@ class ReviewGateServer:
             }
 
             response_file = get_temp_path(f"review_gate_speech_response_{trigger_id}.json")
-            with open(response_file, 'w') as f:
+            with safe_file_operation(response_file, mode='w') as f:
                 json.dump(response_data, f, indent=2)
 
             logger.info(f"📝 Speech response written: {response_file}")

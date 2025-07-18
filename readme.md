@@ -15,7 +15,7 @@ If each main request can now handle the depth of what might have taken 5 separat
 
 **See Review Gate V3 in action!** → <https://www.youtube.com/watch?v=mZmNM-AIf4M>
 
-## ✨ Key Awesomeness (What V3 Packs In)
+## ✨ Key Features
 
 * **🎤 Voice-Activated AI Control:** Speak your sub-prompts directly! Click the mic, speak naturally, and watch your words transcribe automatically using local Faster-Whisper AI.
 * **📷 Visual Context Sharing:** Upload images, screenshots, diagrams, or mockups directly in the popup. The AI sees everything you share.
@@ -26,201 +26,208 @@ If each main request can now handle the depth of what might have taken 5 separat
 * **MCP Integration Magic:** Built on the Model Context Protocol for seamless Cursor integration. The popup automatically appears when needed.
 * **Cross-Platform Speech:** Whisper speech-to-text works flawlessly on macOS and is implemented for Windows, though Windows support hasn't been extensively tested (take it with a grain of salt!).
 
-## 🛠️ The Guts (How V3 Works, Even Better)
+## 🚀 Installation
 
-1. **You (or I):** Give Cursor a task (this counts as 1 main request towards your ~500).
-2. **Cursor AI:** Does its main job (coding, analysis, maybe a few tool calls from the ~25 for this request).
-3. **Review Gate V3 Kicks In (The Magic Part I Evolved!):**
-    * AI calls the `review_gate_chat` MCP tool automatically
-    * Beautiful popup appears in Cursor with multi-modal input options
-    * AI announces it's waiting for your input in the popup
-4. **You (in the popup):**
-    * **Type** quick follow-ups (e.g., "Now add docstrings to all new functions.")
-    * **Speak** your commands using the microphone (automatic transcription)
-    * **Upload images** for visual context (screenshots, mockups, diagrams)
-    * **Or type** `TASK_COMPLETE` when you're satisfied
-5. **Cursor AI (powered by MCP integration):**
-    Reads your popup input (text, speech, images), acts on it (more coding, *more tool calls from the original budget*!), responds in the main chat, then opens the popup again for your *next* input.
-6. **Loop!** This continues, deepening the work on your original request, until you type `TASK_COMPLETE` in the popup.
+### Prerequisites
 
-## 🚀 Get It Going (V3 Installation)
+* **System:** macOS, Linux, or Windows 10/11
+* **IDE:** Cursor (latest version)
+* **Python:** Version 3.8 or higher
+* **Pip:** Python package manager
+* **Audio (for voice):**
+  * **macOS/Linux:** SoX audio utility
+  * **Windows:** SoX (optional, via Chocolatey)
 
-**Two simple steps to supercharge your Cursor workflow:**
+### Quick Install (Recommended)
 
-### Step 1: One-Click Technical Setup
+The automated installer handles dependencies, sets up the MCP server, and configures the Cursor extension.
 
-#### macOS Installation (Fully Tested ✅)
+**macOS/Linux:**
 
 ```bash
-# Clone repository and navigate to V3 subdirectory
+# Clone the repository and navigate to the V3 directory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V3
 
-# Run the magical one-click installer
+# Make the installer executable and run it
+chmod +x install.sh
 ./install.sh
 ```
 
-#### Windows Installation (Not extensively tested, might need manual tweaks, try it with a grain of salt)
-
-**PowerShell (Recommended):**
+**Windows (PowerShell):**
 
 ```powershell
-# Clone repository and navigate to V3 subdirectory
+# Clone the repository and navigate to the V3 directory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V3
 
-# Run PowerShell installer (may need admin privileges)
+# Allow script execution and run the installer
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 ./install.ps1
 ```
 
-**Command Prompt (Alternative):**
+### Manual Installation
+
+If the automated installation fails, follow these steps.
+
+#### 1. Create Installation Directory
+
+**macOS/Linux:**
+
+```bash
+mkdir -p ~/cursor-extensions/review-gate-v3
+cd ~/cursor-extensions/review-gate-v3
+```
+
+**Windows:**
 
 ```cmd
-# Clone repository and navigate to V3 subdirectory
-git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V3
-
-# Run batch installer
-install.bat
+mkdir %USERPROFILE%\cursor-extensions\review-gate-v3
+cd %USERPROFILE%\cursor-extensions\review-gate-v3
 ```
 
-The installer automatically handles:
+#### 2. Copy Required Files
 
-* ✅ **Dependencies**: Package managers (Homebrew/Chocolatey), SoX (for speech), Python packages
-* ✅ **MCP Server**: Global installation in `~/cursor-extensions/review-gate-v3/` (macOS) or `%USERPROFILE%\cursor-extensions\review-gate-v3\` (Windows)
-* ✅ **Extension**: Cursor extension for the popup interface
-* ✅ **Configuration**: MCP integration setup with safe merging of existing configurations
+Copy the following files from the `V3` folder of the cloned repository into your new installation directory:
 
-### Step 2: Copy the V3 Rule to Cursor
+* `review_gate_v3_mcp.py`
+* `requirements_simple.txt`
+* `review-gate-v3-0.0.1.vsix` (This is inside the `V3` folder, not `V3/cursor-extension`)
 
-**CRITICAL STEP**: For the Review Gate V3 to work, you need to copy the V3 rule to your Cursor settings:
+#### 3. Set Up Python Environment
 
-1. **Open the Rule File**: Copy the entire contents of `ReviewGateV3.mdc` from this folder
-2. **Cursor Settings**: Open your Cursor IDE → Settings (Cmd/Ctrl + ,)
-3. **Find Rules Section**: Look for "Rules" or "AI Rules" in the settings
-4. **Paste & Save**: Paste the entire V3 rule content and save
-5. **Restart Cursor**: Restart Cursor completely for the rule to take effect
-
-**Why this step?** The rule tells Cursor when and how to activate the Review Gate V3 popup. Without it, you'll have a working MCP server but no automatic activation!
-
-## 🧪 Testing Your V3 Installation
-
-After both steps are complete:
-
-1. **Manual Popup Test**: Press `Cmd+Shift+R` in Cursor to open the popup manually
-2. **Agent Integration Test**: Ask Cursor: *"Use the review_gate_chat tool to get my feedback"*
-3. **Speech Test**: Click the microphone → speak clearly → verify automatic transcription
-4. **Image Test**: Click the camera icon → upload an image → send with text
-5. **Full Workflow Test**: Give Cursor a complex task and watch the Review Gate V3 popup appear automatically
-
-## 💡 Play Smart (My V3 Tips & The "Why")
-
-* **Why I evolved this hack:** To stop Cursor from ending too soon when I have iterative follow-ups for the *same original thought process*, but now with the power of voice commands and visual context sharing.
-* **Voice Commands Work Best When:** You speak clearly and concisely. The local Whisper AI is quite good but prefers natural, well-paced speech.
-* **Image Context is Gold:** Upload screenshots of errors, mockups of what you want built, or diagrams of architecture. The AI can see and understand visual context.
-* **Platform Notes:** Speech-to-text is rock-solid on macOS. Windows implementation exists but hasn't been battle-tested extensively - your mileage may vary!
-* **Be Clear in All Inputs:** Whether typing, speaking, or sharing images, clear and direct communication in the popup works best.
-* **`TASK_COMPLETE` is Your Exit:** Don't forget to type this in the popup to let the AI finally rest (and free up that main request slot).
-
-## ⚠️ Heads Up! (My Friendly V3 Warnings)
-
-* **EXPERIMENTAL EVOLUTION!** This is V3 of my power-user move. It works because we're very cleverly instructing the AI with MCP integration.
-* **MCP SERVER RUNS LOCALLY:** The rule uses a local MCP server that integrates with Cursor. The installer sets this up automatically.
-* **SPEECH PROCESSING IS LOCAL:** Your voice is processed locally using Faster-Whisper AI - nothing goes to the cloud.
-* **PLATFORM COMPATIBILITY:**
-  * **macOS**: Fully tested and works flawlessly ✅
-  * **Windows**: Implemented with PowerShell and Batch installers (Not extensively tested, might need manual tweaks, try it with a grain of salt) ⚠️
-  * **Linux**: Should work but not tested
-* **PYTHON & SOX NEEDED:** The installer handles these, but your system needs to support Python 3 and SoX for speech functionality.
-* **CURSOR UPDATES MIGHT CHANGE THINGS:** Future Cursor versions could affect how this rule behaves. What works today might need tweaks tomorrow!
-* **REMEMBER THE RULE:** The MCP server is just the engine - you MUST copy the V3 rule to your Cursor settings for automatic activation!
-
-## 🎯 What You Get (V3 Feature Summary)
-
-### 🎤 **Voice-to-Text Magic**
-
-* Click microphone → speak naturally → automatic transcription
-
-* Local Faster-Whisper AI processing (no cloud, no privacy concerns)
-* Professional visual feedback: mic → red stop button → orange spinner → text injection
-
-### 📷 **Image Upload Power**
-
-* Support for PNG, JPG, JPEG, GIF, BMP, WebP formats
-
-* Drag & drop or click to upload
-* Images included in MCP responses so the AI can see your visual context
-* Perfect for sharing screenshots, mockups, error dialogs, or architectural diagrams
-
-### 🎨 **Beautiful Interface**
-
-* Clean popup with orange glow design that matches Cursor's aesthetic
-
-* Horizontally aligned controls for professional appearance
-* Real-time MCP status indicator
-* Smooth animations and responsive feedback
-
-### 🔄 **Seamless MCP Integration**
-
-* Works automatically with Cursor Agent tool calls
-
-* 5-minute timeout for thoughtful responses
-* Global installation works across all your Cursor projects
-* File-based communication protocol for reliability
-
-## 🔧 V3 Troubleshooting
+**macOS/Linux:**
 
 ```bash
-# Check if MCP server is running
-tail -f /tmp/review_gate_v3.log
-
-# Test speech recording capability
-sox --version
-sox -d -r 16000 -c 1 test.wav trim 0 3 && rm test.wav
-
-# Check extension logs in Cursor
-# Press F12 → Console tab for browser logs
-
-# Verify MCP configuration
-cat ~/.cursor/mcp.json
-
-# Test the extension manually
-# Press Cmd+Shift+R in Cursor
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements_simple.txt
 ```
 
-## 🗂️ V3 Files & Structure
+**Windows:**
+
+```cmd
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements_simple.txt
+```
+
+#### 4. Install SoX (for Speech-to-Text)
+
+**macOS:**
 
 ```bash
-V3/
-├── cursor-extension/           # Cursor extension source
-│   ├── extension.js           # Main extension file
-│   ├── package.json           # Extension manifest
-│   └── review-gate-v3-0.0.1.vsix  # Built extension package
-├── review_gate_v3_mcp.py      # MCP server
-├── requirements_simple.txt     # Python dependencies
-├── ReviewGateV3.mdc           # Global rule file (COPY THIS TO CURSOR!)
-├── install.sh                 # One-click installer (macOS)
-├── install.ps1               # PowerShell installer (Windows)
-├── install.bat               # Batch installer (Windows)
-├── uninstall.sh              # Clean uninstaller (macOS)
-├── uninstall.ps1             # PowerShell uninstaller (Windows)
-├── INSTALLATION.md           # Detailed manual setup guide
-├── CLAUDE.md                 # Technical documentation
-└── README.md                 # This file
+brew install sox
 ```
 
-## 🎉 Why V3? You Asked For It
+**Linux (Ubuntu/Debian):**
 
-After the original Review Gate gained **100+ forks**, **900+ stars**, **100,000+ impressions**, and countless requests to evolve it further - **you asked for it, I delivered!** The community response was incredible, and the demand for voice commands, visual context, and a more sophisticated interface was overwhelming. V3 is my answer to every single feature request and improvement suggestion.
+```bash
+sudo apt-get install sox
+```
 
-## 🧑‍💻 About Me & This V3 Evolution
+**Windows (with Chocolatey):**
 
-This "Review Gate V3" represents the evolution of my original terminal-based rule into a full-featured, multi-modal interaction system. It was born from my own desire to truly partner with Cursor's AI using not just text, but voice commands and visual context. My goal remains the same: to make every interaction as deep and complete as possible—and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold!
+```cmd
+choco install sox
+```
 
-The V3 system leverages the Model Context Protocol (MCP) to create a seamless bridge between Cursor's AI and a rich, interactive popup interface. Whether you're speaking commands, sharing screenshots, or typing follow-ups, it's all designed to keep you in the flow while maximizing the value of each Cursor request.
+#### 5. Configure MCP Server
 
-To connect with me or learn more about my work, visit: [www.audienclature.com](https://www.audienclature.com)
+Create or edit `~/.cursor/mcp.json` (macOS/Linux) or `%USERPROFILE%\.cursor\mcp.json` (Windows) and add the following configuration. **Remember to replace `YOUR_USERNAME` with your actual username.**
 
----
+**macOS/Linux:**
 
-*Happy (and supercharged) coding with Cursor V3! May your AI always await your final command, your voice be clearly transcribed, your images perfectly understood, and your monthly requests feel like they last forever!* ✨🎤📷
+```json
+{
+  "mcpServers": {
+    "review-gate-v3": {
+      "command": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3/venv/bin/python",
+      "args": ["/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3/review_gate_v3_mcp.py"],
+      "env": {
+        "PYTHONPATH": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3",
+        "PYTHONUNBUFFERED": "1",
+        "REVIEW_GATE_MODE": "cursor_integration"
+      }
+    }
+  }
+}
+```
+
+**Windows:**
+
+```json
+{
+  "mcpServers": {
+    "review-gate-v3": {
+      "command": "C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v3\\venv\\Scripts\\python.exe",
+      "args": ["C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v3\\review_gate_v3_mcp.py"],
+      "env": {
+        "PYTHONPATH": "C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v3",
+        "PYTHONUNBUFFERED": "1",
+        "REVIEW_GATE_MODE": "cursor_integration"
+      }
+    }
+  }
+}
+```
+
+#### 6. Install Cursor Extension
+
+1. Open Cursor.
+2. Press `Cmd+Shift+P` (macOS) or `Ctrl+Shift+P` (Windows/Linux).
+3. Type "Extensions: Install from VSIX" and press Enter.
+4. Navigate to your installation directory and select `review-gate-v3-0.0.1.vsix`.
+5. Restart Cursor when prompted.
+
+## How to Use
+
+### 1. Copy the Rule to Cursor
+
+**This is a critical step.** The rule tells Cursor when to activate the Review Gate.
+
+1. Open the `ReviewGateV3.mdc` file from the repository.
+2. Copy the entire content of the file.
+3. In Cursor, go to `File > Settings > Rules`.
+4. Paste the rule into the rules section and save.
+5. Restart Cursor for the rule to take effect.
+
+### 2. Using the Review Gate
+
+Once installed and configured, the Review Gate will automatically appear when you give Cursor a task that triggers the `review_gate_chat` tool. You can also trigger it manually with `Cmd+Shift+R` (macOS) or `Ctrl+Shift+R` (Windows/Linux).
+
+In the popup, you can:
+
+* **Type** follow-up commands.
+* **Speak** commands by clicking the microphone icon.
+* **Upload** images for visual context.
+* Type `TASK_COMPLETE` when you are finished with the current task.
+
+## Troubleshooting
+
+* **MCP Server Not Starting:**
+  * Verify your Python installation (`python3 --version`).
+  * Ensure the virtual environment is activated and dependencies are installed.
+  * Check the log file at `/tmp/review_gate_v3.log` (macOS/Linux) or `%TEMP%\review_gate_v3.log` (Windows).
+* **Extension Not Working:**
+  * Make sure the extension is enabled in the Extensions panel in Cursor.
+  * Check the developer console in Cursor (`Help > Toggle Developer Tools`) for errors.
+* **Popup Not Appearing:**
+  * Double-check your `mcp.json` configuration for correct paths.
+  * Ensure you have copied the rule into Cursor's settings.
+
+## For Developers
+
+If you want to integrate Review Gate V3 with your own VSCode extensions, see the [VSCode Integration Guide](VSCODE_INTEGRATION.md).
+
+## ⚠️ Disclaimers
+
+* **Experimental:** This is a power-user tool. It's clever, but future Cursor updates might affect it.
+* **Local Server:** The MCP server runs locally on your machine.
+* **Local Speech Processing:** Voice is processed locally with Faster-Whisper.
+* **Platform Compatibility:**
+  * **macOS:** Fully tested.
+  * **Windows:** Implemented, but not extensively tested.
+  * **Linux:** Should work, but not tested.
+
+## About Me
+
+This project was created by Lakshman Turlapati. You can find more of my work at [www.audienclature.com](https://www.audienclature.com).
