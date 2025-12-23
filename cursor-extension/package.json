@@ -2,7 +2,7 @@
   "name": "review-gate-v2",
   "displayName": "Review Gate V2 ゲート",
   "description": "Advanced Review Gate system with MCP integration for Cursor IDE",
-  "version": "2.7.3",
+  "version": "3.0.0",
   "author": "Lakshman Turlapati",
   "publisher": "LakshmanTurlapati",
   "icon": "icon.png",
@@ -30,7 +30,7 @@
     "onStartupFinished",
     "onCommand:reviewGate.openChat"
   ],
-  "main": "./extension.js",
+  "main": "./src/extension.js",
   "contributes": {
     "commands": [
       {
@@ -50,9 +50,11 @@
     ]
   },
   "scripts": {
-    "package": "vsce package"
+    "package": "vsce package",
+    "lint": "eslint src"
   },
   "devDependencies": {
-    "@vscode/vsce": "^2.32.0"
+    "@vscode/vsce": "^2.32.0",
+    "eslint": "^8.56.0"
   }
 }

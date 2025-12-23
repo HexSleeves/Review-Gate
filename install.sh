@@ -59,16 +59,14 @@ if [[ "$OS" == "macos" ]]; then
 fi
 
 # Install SoX for speech-to-text
-log_progress "Installing SoX for speech-to-text..."
-if ! command -v sox &> /dev/null; then
-    if [[ "$OS" == "linux" ]]; then
-        sudo apt-get update
-        $INSTALL_CMD sox
-    else
-        $INSTALL_CMD sox
-    fi
+log_progress "Installing System Dependencies (SoX, FFmpeg, pkg-config)..."
+if [[ "$OS" == "linux" ]]; then
+    sudo apt-get update
+    # Install SoX, pkg-config and FFmpeg libraries required for building PyAV
+    $INSTALL_CMD sox pkg-config ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev
 else
-    log_success "SoX already installed"
+    # macOS
+    $INSTALL_CMD sox pkg-config ffmpeg
 fi
 
 # Validate SoX installation and microphone access
@@ -118,8 +116,13 @@ mkdir -p "$REVIEW_GATE_DIR"
 
 # Copy MCP server files
 log_progress "Copying MCP server files..."
-cp "$SCRIPT_DIR/review_gate_v2_mcp.py" "$REVIEW_GATE_DIR/"
-cp "$SCRIPT_DIR/requirements_simple.txt" "$REVIEW_GATE_DIR/"
+# Copy the package structure
+cp -r "$SCRIPT_DIR/review_gate_mcp" "$REVIEW_GATE_DIR/"
+cp "$SCRIPT_DIR/pyproject.toml" "$REVIEW_GATE_DIR/"
+# Copy legacy files just in case, but prefer package
+if [[ -f "$SCRIPT_DIR/requirements_simple.txt" ]]; then
+    cp "$SCRIPT_DIR/requirements_simple.txt" "$REVIEW_GATE_DIR/"
+fi
 
 # Create Python virtual environment
 log_progress "Creating Python virtual environment..."
@@ -141,24 +144,30 @@ log_progress "Installing Python dependencies..."
 source venv/bin/activate
 pip install --upgrade pip
 
-# Install dependencies with better error handling
-log_progress "Installing core dependencies (mcp, pillow)..."
-pip install mcp>=1.9.2 Pillow>=10.0.0 asyncio typing-extensions>=4.14.0
+# Install the package in editable mode (or standard install)
+log_progress "Installing Review Gate MCP package (core)..."
+pip install .
 
-# Install faster-whisper with platform-specific handling
-log_progress "Installing faster-whisper for speech-to-text..."
-if pip install faster-whisper>=1.0.0; then
-    log_success "faster-whisper installed successfully"
+# Attempt to install speech dependencies
+log_progress "Installing speech dependencies..."
+if pip install ".[speech]"; then
+    log_success "Speech dependencies installed successfully"
 else
-    log_warning "faster-whisper installation failed - trying alternative approach"
-    # Try installing without CUDA dependencies for CPU-only
+    log_warning "Standard speech dependency installation failed"
+    log_info "Attempting fallback installation for faster-whisper..."
+    
+    # Try manual install ignoring dependencies that might conflict
+    # This is a 'best effort' to get it working on systems with onnxruntime issues
     if pip install faster-whisper>=1.0.0 --no-deps; then
-        pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
-        log_success "faster-whisper installed with CPU-only dependencies"
+         log_success "faster-whisper installed manually (deps skipped)"
+         # Try to verify imports
+         if python3 -c "import faster_whisper" 2>/dev/null; then
+             log_success "faster-whisper verified working"
+         else
+             log_warning "faster-whisper installed but import failed - check dependencies"
+         fi
     else
-        log_error "faster-whisper installation failed"
-        log_info "Speech-to-text will be disabled"
-        log_info "You can manually install later: pip install faster-whisper"
+         log_error "Could not install faster-whisper. Speech features will be disabled."
     fi
 fi
 
@@ -218,7 +227,7 @@ if has_existing and os.path.exists(config_file):
 # Add Review Gate V2 configuration
 existing_servers['review-gate-v2'] = {
     'command': os.path.join(review_gate_dir, 'venv/bin/python'),
-    'args': [os.path.join(review_gate_dir, 'review_gate_v2_mcp.py')],
+    'args': ['-m', 'review_gate_mcp.main'],
     'env': {
         'PYTHONPATH': review_gate_dir,
         'PYTHONUNBUFFERED': '1',
@@ -265,7 +274,7 @@ log_progress "Testing MCP server..."
 cd "$REVIEW_GATE_DIR"
 source venv/bin/activate
 TEMP_DIR=$(python3 -c 'import tempfile; print(tempfile.gettempdir())')
-timeout 5s python review_gate_v2_mcp.py > "$TEMP_DIR/mcp_test.log" 2>&1 || true
+timeout 5s python -m review_gate_mcp.main > "$TEMP_DIR/mcp_test.log" 2>&1 || true
 deactivate
 
 if grep -q "Review Gate 2.0 server initialized" "$TEMP_DIR/mcp_test.log"; then
@@ -277,6 +286,11 @@ rm -f "$TEMP_DIR/mcp_test.log"
 
 # Install Cursor extension
 EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-2.7.3.vsix"
+# Check if new version exists
+if [[ -f "$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix" ]]; then
+    EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix"
+fi
+
 if [[ -f "$EXTENSION_FILE" ]]; then
     log_progress "Installing Cursor extension..."
     
@@ -302,7 +316,7 @@ if [[ -f "$EXTENSION_FILE" ]]; then
         log_step "1. Open Cursor IDE"
         log_step "2. Press Cmd+Shift+P (or Ctrl+Shift+P on Linux)"
         log_step "3. Type 'Extensions: Install from VSIX'"
-        log_step "4. Select: $REVIEW_GATE_DIR/review-gate-v2-2.7.3.vsix"
+        log_step "4. Select: $REVIEW_GATE_DIR/$(basename "$EXTENSION_FILE")"
         log_step "5. Restart Cursor when prompted"
         echo ""
         
@@ -318,9 +332,14 @@ if [[ -f "$EXTENSION_FILE" ]]; then
         fi
     fi
 else
-    log_error "Extension file not found: $EXTENSION_FILE"
-    log_info "Please ensure the extension is built in cursor-extension/ directory"
-    log_info "Or install manually from the Cursor Extensions marketplace"
+    # Check if we are in dev mode and source is available
+    if [[ -d "$SCRIPT_DIR/cursor-extension/src" ]]; then
+        log_info "Extension VSIX not found, but source is available."
+        log_info "You may need to build the extension using 'vsce package'."
+    else
+        log_error "Extension file not found: $EXTENSION_FILE"
+        log_info "Please ensure the extension is built in cursor-extension/ directory"
+    fi
 fi
 
 # Install global rule (optional) - Cross-platform directory detection
@@ -330,14 +349,14 @@ elif [[ "$OS" == "linux" ]]; then
     CURSOR_RULES_DIR="$HOME/.config/Cursor/User/rules"
 fi
 
-if [[ -f "$SCRIPT_DIR/ReviewGate.mdc" ]] && [[ -n "$CURSOR_RULES_DIR" ]]; then
+if [[ -f "$SCRIPT_DIR/ReviewGateV2.mdc" ]] && [[ -n "$CURSOR_RULES_DIR" ]]; then
     log_progress "Installing global rule..."
     mkdir -p "$CURSOR_RULES_DIR"
-    cp "$SCRIPT_DIR/ReviewGate.mdc" "$CURSOR_RULES_DIR/"
-    log_success "Global rule installed to: $CURSOR_RULES_DIR"
-elif [[ -f "$SCRIPT_DIR/ReviewGate.mdc" ]]; then
+    cp "$SCRIPT_DIR/ReviewGateV2.mdc" "$CURSOR_RULES_DIR/ReviewGate.mdc"
+    log_success "Global rule installed to: $CURSOR_RULES_DIR/ReviewGate.mdc"
+elif [[ -f "$SCRIPT_DIR/ReviewGateV2.mdc" ]]; then
     log_warning "Could not determine Cursor rules directory for this platform"
-    log_info "Global rule available at: $SCRIPT_DIR/ReviewGate.mdc"
+    log_info "Global rule available at: $SCRIPT_DIR/ReviewGateV2.mdc"
 fi
 
 # Clean up any existing temp files
@@ -352,8 +371,7 @@ echo ""
 echo -e "${BLUE}Installation Summary:${NC}"
 log_step "   - MCP Server: $REVIEW_GATE_DIR"
 log_step "   - MCP Config: $CURSOR_MCP_FILE"
-log_step "   - Extension: $REVIEW_GATE_DIR/review-gate-v2-2.7.3.vsix"
-log_step "   - Global Rule: $CURSOR_RULES_DIR/ReviewGate.mdc"
+log_step "   - Extension: $REVIEW_GATE_DIR/$(basename "$EXTENSION_FILE" 2>/dev/null || echo "review-gate-v2-*.vsix")"
 echo ""
 echo -e "${BLUE}Testing Your Installation:${NC}"
 log_step "1. Restart Cursor completely"
@@ -379,7 +397,7 @@ log_success "Enjoy your voice-activated Review Gate!"
 
 # Final verification
 log_progress "Final verification..."
-if [[ -f "$REVIEW_GATE_DIR/review_gate_v2_mcp.py" ]] && \
+if [[ -f "$REVIEW_GATE_DIR/pyproject.toml" ]] && \
    [[ -f "$CURSOR_MCP_FILE" ]] && \
    [[ -d "$REVIEW_GATE_DIR/venv" ]]; then
     log_success "All components installed successfully"
