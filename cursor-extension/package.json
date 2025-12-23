@@ -30,7 +30,7 @@
     "onStartupFinished",
     "onCommand:reviewGate.openChat"
   ],
-  "main": "./src/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -50,11 +50,15 @@
     ]
   },
   "scripts": {
-    "package": "vsce package",
+    "vscode:prepublish": "npm run package",
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
     "lint": "eslint src"
   },
   "devDependencies": {
     "@vscode/vsce": "^2.32.0",
-    "eslint": "^8.56.0"
+    "eslint": "^8.56.0",
+    "esbuild": "^0.24.0"
   }
 }

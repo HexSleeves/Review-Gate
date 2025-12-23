@@ -36,7 +36,7 @@ graph TD
     F --> G{Task Complete?}
     G -->|No| D
     G -->|Yes| H[Single Request Delivers 5x Value]
-    
+
 ```
 
 
@@ -73,7 +73,7 @@ graph TD
    * AI calls the `review_gate_chat` MCP tool automatically
    * Beautiful popup appears in Cursor with multi-modal input options
    * AI announces it's waiting for your input in the popup
-4. **You (in the popup):** 
+4. **You (in the popup):**
    * **Type** quick follow-ups (e.g., "Now add docstrings to all new functions.")
    * **Speak** your commands using the microphone (automatic transcription)
    * **Upload images** for visual context (screenshots, mockups, diagrams)
@@ -122,7 +122,7 @@ The installer automatically handles:
 
 If the automatic installer doesn't install the extension properly, you can install it manually:
 
-1. **Download Extension**: Get `review-gate-v2-2.7.3.vsix` from the V2 directory
+1. **Download Extension**: Get `review-gate-v2-3.0.0.vsix` from the V2 directory
 2. **Open Cursor**: Launch Cursor IDE
 3. **Extensions Panel**: Press `Cmd/Ctrl+Shift+X` to open Extensions
 4. **Install from VSIX**: Click the `...` menu → "Install from VSIX..."
@@ -221,7 +221,7 @@ cat ~/.cursor/mcp.json
 * **EXPERIMENTAL EVOLUTION!** This is V2 of my power-user move. It works because we're very cleverly instructing the AI with MCP integration.
 * **MCP SERVER RUNS LOCALLY:** The rule uses a local MCP server that integrates with Cursor. The installer sets this up automatically.
 * **SPEECH PROCESSING IS LOCAL:** Your voice is processed locally using Faster-Whisper AI - nothing goes to the cloud.
-* **PLATFORM COMPATIBILITY:** 
+* **PLATFORM COMPATIBILITY:**
   - **macOS**: Fully tested and works flawlessly
   - **Windows**: Implemented and supported
   - **Linux**: Should work but not extensively tested

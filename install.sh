@@ -74,7 +74,7 @@ log_progress "Validating SoX and microphone setup..."
 if command -v sox &> /dev/null; then
     SOX_VERSION=$(sox --version 2>&1 | head -n1)
     log_success "SoX found: $SOX_VERSION"
-    
+
     # Test microphone access (quick test)
     log_progress "Testing microphone access..."
     if timeout 3s sox -d -r 16000 -c 1 /tmp/sox_test_$$.wav trim 0 0.1 2>/dev/null; then
@@ -155,7 +155,7 @@ if pip install ".[speech]"; then
 else
     log_warning "Standard speech dependency installation failed"
     log_info "Attempting fallback installation for faster-whisper..."
-    
+
     # Try manual install ignoring dependencies that might conflict
     # This is a 'best effort' to get it working on systems with onnxruntime issues
     if pip install faster-whisper>=1.0.0 --no-deps; then
@@ -185,7 +185,7 @@ if [[ -f "$CURSOR_MCP_FILE" ]]; then
     BACKUP_FILE="$CURSOR_MCP_FILE.backup.$(date +%Y%m%d_%H%M%S)"
     log_info "Backing up existing MCP configuration to: $BACKUP_FILE"
     cp "$CURSOR_MCP_FILE" "$BACKUP_FILE"
-    
+
     # Check if the existing config is valid JSON (simplified)
     if ! python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1; then
         log_warning "Existing MCP config has invalid JSON format"
@@ -252,7 +252,7 @@ fi
 # Validate the generated configuration
 if python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1; then
     log_success "MCP configuration file created at: $CURSOR_MCP_FILE"
-    
+
     # Count configured servers (simplified)
     SERVER_COUNT=$(python3 -c "import json; print(len(json.load(open('$CURSOR_MCP_FILE')).get('mcpServers', {})))")
     log_step "Total MCP servers configured: $SERVER_COUNT"
@@ -285,7 +285,7 @@ fi
 rm -f "$TEMP_DIR/mcp_test.log"
 
 # Install Cursor extension
-EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-2.7.3.vsix"
+EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix"
 # Check if new version exists
 if [[ -f "$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix" ]]; then
     EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix"
@@ -293,10 +293,10 @@ fi
 
 if [[ -f "$EXTENSION_FILE" ]]; then
     log_progress "Installing Cursor extension..."
-    
+
     # Copy extension to installation directory
     cp "$EXTENSION_FILE" "$REVIEW_GATE_DIR/"
-    
+
     # Try automated installation first
     EXTENSION_INSTALLED=false
     if command -v cursor &> /dev/null; then
@@ -308,7 +308,7 @@ if [[ -f "$EXTENSION_FILE" ]]; then
             log_warning "Automated installation failed, falling back to manual method"
         fi
     fi
-    
+
     # If automated installation failed, provide manual instructions
     if [[ "$EXTENSION_INSTALLED" == false ]]; then
         echo -e "${BLUE}MANUAL EXTENSION INSTALLATION REQUIRED:${NC}"
@@ -319,7 +319,7 @@ if [[ -f "$EXTENSION_FILE" ]]; then
         log_step "4. Select: $REVIEW_GATE_DIR/$(basename "$EXTENSION_FILE")"
         log_step "5. Restart Cursor when prompted"
         echo ""
-        
+
         # Try to open Cursor if available
         if command -v cursor &> /dev/null; then
             log_progress "Opening Cursor IDE..."

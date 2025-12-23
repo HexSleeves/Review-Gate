@@ -1,0 +1,8 @@
+.vscode/**
+.vscode-test/**
+src/**
+.gitignore
+vsc-extension-quickstart.md
+esbuild.js
+**/*.map
+**/*.ts
