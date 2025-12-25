@@ -1,5 +1,5 @@
 """
-MCP Resources implementation for Review Gate V2.
+MCP Resources implementation for Review Gate V3.
 Exposes conversation history, templates, and configuration as MCP resources.
 """
 import json

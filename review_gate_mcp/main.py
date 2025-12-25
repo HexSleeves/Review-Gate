@@ -5,13 +5,13 @@ from .config import logger
 from .server import ReviewGateServer
 
 async def main():
-    """Main entry point for Review Gate v2 with immediate activation"""
-    logger.info("🎬 STARTING Review Gate v2 MCP Server...")
+    """Main entry point for Review Gate V3 with immediate activation"""
+    logger.info("🎬 STARTING Review Gate V3 MCP Server...")
     logger.info(f"Python version: {sys.version}")
     logger.info(f"Platform: {sys.platform}")
     logger.info(f"OS name: {os.name}")
     logger.info(f"Working directory: {os.getcwd()}")
-    
+
     try:
         server = ReviewGateServer()
         await server.run()

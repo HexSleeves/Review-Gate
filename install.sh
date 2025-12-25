@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Review Gate V2 - One-Click Installation Script
+# Review Gate V3 - One-Click Installation Script
 # Author: Lakshman Turlapati
-# This script installs Review Gate V2 globally for Cursor IDE
+# This script installs Review Gate V3 globally for Cursor IDE
 
 set -e  # Exit on any error
 
@@ -27,7 +27,7 @@ log_step() { echo -e "${WHITE}$1${NC}"; }
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
-echo -e "${BLUE}Review Gate V2 - One-Click Installation${NC}"
+echo -e "${BLUE}Review Gate V3 - One-Click Installation${NC}"
 echo -e "${BLUE}=========================================${NC}"
 echo ""
 
@@ -224,7 +224,7 @@ if has_existing and os.path.exists(config_file):
     except:
         existing_servers = {}
 
-# Add Review Gate V2 configuration
+# Add Review Gate V3 configuration
 existing_servers['review-gate-v2'] = {
     'command': os.path.join(review_gate_dir, 'venv/bin/python'),
     'args': ['-m', 'review_gate_mcp.main'],
@@ -256,7 +256,7 @@ if python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1
     # Count configured servers (simplified)
     SERVER_COUNT=$(python3 -c "import json; print(len(json.load(open('$CURSOR_MCP_FILE')).get('mcpServers', {})))")
     log_step "Total MCP servers configured: $SERVER_COUNT"
-    log_step "  - review-gate-v2 (Review Gate V2)"
+    log_step "  - review-gate-v2 (Review Gate V3)"
 else
     log_error "Generated MCP configuration is invalid"
     if [[ -f "$BACKUP_FILE" ]]; then
@@ -365,7 +365,7 @@ TEMP_DIR=$(python3 -c 'import tempfile; print(tempfile.gettempdir())')
 rm -f "$TEMP_DIR"/review_gate_* "$TEMP_DIR"/mcp_response* 2>/dev/null || true
 
 echo ""
-log_success "Review Gate V2 Installation Complete!"
+log_success "Review Gate V3 Installation Complete!"
 echo -e "${GREEN}=======================================${NC}"
 echo ""
 echo -e "${BLUE}Installation Summary:${NC}"

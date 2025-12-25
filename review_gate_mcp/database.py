@@ -1,5 +1,5 @@
 """
-SQLite database layer for Review Gate V2.
+SQLite database layer for Review Gate V3.
 Uses asyncio.to_thread for async operations without external dependencies.
 """
 import asyncio

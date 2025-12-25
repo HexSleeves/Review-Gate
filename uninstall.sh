@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Review Gate V2 - Uninstaller Script
+# Review Gate V3 - Uninstaller Script
 # Author: Lakshman Turlapati
 
 set -e
@@ -24,18 +24,18 @@ log_warning() { echo -e "${YELLOW}WARNING: $1${NC}"; }
 log_step() { echo -e "${WHITE}$1${NC}"; }
 log_header() { echo -e "${BLUE}$1${NC}"; }
 
-log_header "Review Gate V2 - Uninstaller"
+log_header "Review Gate V3 - Uninstaller"
 log_header "============================="
 echo ""
 
-read -p "$(echo -e ${YELLOW}WARNING: Are you sure you want to uninstall Review Gate V2? [y/N]: ${NC})" -n 1 -r
+read -p "$(echo -e ${YELLOW}WARNING: Are you sure you want to uninstall Review Gate V3? [y/N]: ${NC})" -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     log_info "Uninstallation cancelled"
     exit 0
 fi
 
-log_progress "Removing Review Gate V2..."
+log_progress "Removing Review Gate V3..."
 
 # Remove installation directory
 REVIEW_GATE_DIR="$HOME/cursor-extensions/review-gate-v2"
@@ -49,7 +49,7 @@ CURSOR_MCP_FILE="$HOME/.cursor/mcp.json"
 if [[ -f "$CURSOR_MCP_FILE" ]]; then
     # Create backup
     cp "$CURSOR_MCP_FILE" "$CURSOR_MCP_FILE.backup"
-    
+
     # Remove review-gate-v2 entry (simple approach - remove entire config)
     echo '{"mcpServers":{}}' > "$CURSOR_MCP_FILE"
     log_success "Removed MCP configuration (backup created)"
@@ -90,12 +90,12 @@ if [[ "$EXTENSION_REMOVED" == false ]]; then
     log_header "Manual Steps Required:"
     log_step "1. Open Cursor IDE"
     log_step "2. Go to Extensions (Cmd+Shift+X or Ctrl+Shift+X)"
-    log_step "3. Find 'Review Gate V2' and uninstall it"
+    log_step "3. Find 'Review Gate V3' and uninstall it"
     log_step "4. Restart Cursor"
     echo ""
 fi
 
-log_success "Review Gate V2 uninstallation complete!"
+log_success "Review Gate V3 uninstallation complete!"
 log_header "========================================="
 echo ""
 log_header "What was removed:"

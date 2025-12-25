@@ -8,7 +8,7 @@ import vscode from "vscode";
 
 function openReviewGatePopup(context, options = {}) {
   const {
-    message = "Welcome to Review Gate V2! Please provide your review or feedback.",
+    message = "Welcome to Review Gate V3! Please provide your review or feedback.",
     title = "Review Gate",
     autoFocus = false,
     toolData = null,
@@ -27,6 +27,22 @@ function openReviewGatePopup(context, options = {}) {
     // Always use consistent title
     state.chatPanel.title = "Review Gate";
 
+    // Send new message to existing panel (fixes issue where only first message showed)
+    if (message && !message.includes("I have completed")) {
+      setTimeout(() => {
+        state.chatPanel.webview.postMessage({
+          command: "addMessage",
+          text: message,
+          type: mcpIntegration ? "assistant" : "system",
+          plain: !mcpIntegration,
+          toolData: toolData,
+          mcpIntegration: mcpIntegration,
+          triggerId: triggerId,
+          specialHandling: specialHandling,
+        });
+      }, 150);
+    }
+
     // Set MCP status to active when revealing panel for new input
     if (mcpIntegration) {
       setTimeout(() => {
@@ -34,7 +50,7 @@ function openReviewGatePopup(context, options = {}) {
           command: "updateMcpStatus",
           active: true,
         });
-      }, 100);
+      }, 200);
     }
 
     // Auto-focus if requested
@@ -43,7 +59,7 @@ function openReviewGatePopup(context, options = {}) {
         state.chatPanel.webview.postMessage({
           command: "focus",
         });
-      }, 200);
+      }, 300);
     }
 
     return;

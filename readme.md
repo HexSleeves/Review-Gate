@@ -10,7 +10,7 @@
 [![Stars](https://img.shields.io/github/stars/LakshmanTurlapati/Review-Gate.svg)](https://github.com/LakshmanTurlapati/Review-Gate/stargazers)
 [![Forks](https://img.shields.io/github/forks/LakshmanTurlapati/Review-Gate.svg)](https://github.com/LakshmanTurlapati/Review-Gate/network)
 
-![Review Gate V2 Interface](assets/snippet.png)
+![Review Gate V3 Interface](assets/snippet.png)
 
 **Cursor** would often drop the mic way too early! I'd give it a complex task, it'd use maybe 5 of its ~25 available tool calls for that single "main request," then call it a day. Not only was that untapped AI power for that *single thought*, but making small follow-up tweaks meant starting a *new request*. Doing that too often, and my precious **~500 monthly requests** (you know the ones!) would burn up much faster than I liked.
 
@@ -38,8 +38,6 @@ graph TD
     G -->|Yes| H[Single Request Delivers 5x Value]
 
 ```
-
-
 
 ## Features Comparison
 
@@ -69,7 +67,7 @@ graph TD
 
 1. **You (or I):** Give Cursor a task (this counts as 1 main request towards your ~500).
 2. **Cursor AI:** Does its main job (coding, analysis, maybe a few tool calls from the ~25 for this request).
-3. **Review Gate V2 Kicks In (The Magic Part I Evolved!):**
+3. **Review Gate V3 Kicks In (The Magic Part I Evolved!):**
    * AI calls the `review_gate_chat` MCP tool automatically
    * Beautiful popup appears in Cursor with multi-modal input options
    * AI announces it's waiting for your input in the popup
@@ -93,6 +91,7 @@ graph TD
 #### Step 1: One-Click Technical Setup
 
 **macOS Installation (Fully Tested)**
+
 ```bash
 # Clone repository and navigate to V2 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
@@ -103,6 +102,7 @@ cd Review-Gate/V2
 ```
 
 **Windows Installation**
+
 ```powershell
 # Clone repository and navigate to V2 subdirectory
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
@@ -113,10 +113,10 @@ cd Review-Gate/V2
 ```
 
 The installer automatically handles:
-- **Dependencies**: Package managers (Homebrew/Chocolatey), SoX (for speech), Python packages
-- **MCP Server**: Global installation with proper configuration
-- **Extension**: Cursor extension for the popup interface
-- **Configuration**: MCP integration setup with safe merging of existing configurations
+* **Dependencies**: Package managers (Homebrew/Chocolatey), SoX (for speech), Python packages
+* **MCP Server**: Global installation with proper configuration
+* **Extension**: Cursor extension for the popup interface
+* **Configuration**: MCP integration setup with safe merging of existing configurations
 
 #### Alternative: Manual Extension Installation
 
@@ -131,7 +131,7 @@ If the automatic installer doesn't install the extension properly, you can insta
 
 #### Step 2: Copy the V2 Rule to Cursor
 
-**CRITICAL STEP**: For the Review Gate V2 to work, you need to copy the V2 rule to your Cursor settings:
+**CRITICAL STEP**: For the Review Gate V3 to work, you need to copy the V2 rule to your Cursor settings:
 
 1. **Open the Rule File**: Copy the entire contents of `V2/ReviewGateV2.mdc`
 2. **Cursor Settings**: Open your Cursor IDE → Settings (Cmd/Ctrl + ,)
@@ -157,32 +157,36 @@ After both steps are complete:
 2. **Agent Integration Test**: Ask Cursor: *"Use the review_gate_chat tool to get my feedback"*
 3. **Speech Test**: Click the microphone → speak clearly → verify automatic transcription
 4. **Image Test**: Click the camera icon → upload an image → send with text
-5. **Full Workflow Test**: Give Cursor a complex task and watch the Review Gate V2 popup appear automatically
+5. **Full Workflow Test**: Give Cursor a complex task and watch the Review Gate V3 popup appear automatically
 
 ## What You Get (V2 Feature Summary)
 
 ### **Voice-to-Text Magic**
+
 - Click microphone → speak naturally → automatic transcription
-- Local Faster-Whisper AI processing (no cloud, no privacy concerns)
-- Professional visual feedback: mic → red stop button → orange spinner → text injection
+* Local Faster-Whisper AI processing (no cloud, no privacy concerns)
+* Professional visual feedback: mic → red stop button → orange spinner → text injection
 
 ### **Image Upload Power**
+
 - Support for PNG, JPG, JPEG, GIF, BMP, WebP formats
-- Drag & drop or click to upload
-- Images included in MCP responses so the AI can see your visual context
-- Perfect for sharing screenshots, mockups, error dialogs, or architectural diagrams
+* Drag & drop or click to upload
+* Images included in MCP responses so the AI can see your visual context
+* Perfect for sharing screenshots, mockups, error dialogs, or architectural diagrams
 
 ### **Beautiful Interface**
+
 - Clean popup with orange glow design that matches Cursor's aesthetic
-- Horizontally aligned controls for professional appearance
-- Real-time MCP status indicator
-- Smooth animations and responsive feedback
+* Horizontally aligned controls for professional appearance
+* Real-time MCP status indicator
+* Smooth animations and responsive feedback
 
 ### **Seamless MCP Integration**
+
 - Works automatically with Cursor Agent tool calls
-- 5-minute timeout for thoughtful responses
-- Global installation works across all your Cursor projects
-- File-based communication protocol for reliability
+* 5-minute timeout for thoughtful responses
+* Global installation works across all your Cursor projects
+* File-based communication protocol for reliability
 
 ## Play Smart (My Tips & The "Why")
 
@@ -215,27 +219,26 @@ cat ~/.cursor/mcp.json
 # Press Cmd+Shift+R in Cursor
 ```
 
-
 ## Heads Up! (My Friendly Warnings)
 
 * **EXPERIMENTAL EVOLUTION!** This is V2 of my power-user move. It works because we're very cleverly instructing the AI with MCP integration.
 * **MCP SERVER RUNS LOCALLY:** The rule uses a local MCP server that integrates with Cursor. The installer sets this up automatically.
 * **SPEECH PROCESSING IS LOCAL:** Your voice is processed locally using Faster-Whisper AI - nothing goes to the cloud.
 * **PLATFORM COMPATIBILITY:**
-  - **macOS**: Fully tested and works flawlessly
-  - **Windows**: Implemented and supported
-  - **Linux**: Should work but not extensively tested
+  * **macOS**: Fully tested and works flawlessly
+  * **Windows**: Implemented and supported
+  * **Linux**: Should work but not extensively tested
 * **PYTHON & SOX NEEDED:** The installer handles these, but your system needs to support Python 3 and SoX for speech functionality.
 * **CURSOR UPDATES MIGHT CHANGE THINGS:** Future Cursor versions could affect how this rule behaves. What works today might need tweaks tomorrow!
 * **REMEMBER THE RULE:** The MCP server is just the engine - you MUST copy the V2 rule to your Cursor settings for automatic activation!
 
-## Why V2? You Asked For It!
+## Why V2? You Asked For It
 
 After the original Review Gate gained **100+ forks**, **100+ stars**, **100,000+ impressions**, and countless requests to evolve it further - **you asked for it, I delivered!** The community response was incredible, and the demand for voice commands, visual context, and a more sophisticated interface was overwhelming. V2 is my answer to every single feature request and improvement suggestion.
 
 ## About Me & This Evolution
 
-This "Review Gate V2" represents the evolution of my original terminal-based rule into a full-featured, multi-modal interaction system. It was born from my own desire to truly partner with Cursor's AI using not just text, but voice commands and visual context. My goal remains the same: to make every interaction as deep and complete as possible and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold!
+This "Review Gate V3" represents the evolution of my original terminal-based rule into a full-featured, multi-modal interaction system. It was born from my own desire to truly partner with Cursor's AI using not just text, but voice commands and visual context. My goal remains the same: to make every interaction as deep and complete as possible and ensure every available tool call for a big idea gets its chance to shine, making each of those ~500 requests count like gold!
 
 The V2 system leverages the Model Context Protocol (MCP) to create a seamless bridge between Cursor's AI and a rich, interactive popup interface. Whether you're speaking commands, sharing screenshots, or typing follow-ups, it's all designed to keep you in the flow while maximizing the value of each Cursor request.
 

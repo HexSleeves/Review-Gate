@@ -4,16 +4,16 @@ const { startMcpStatusMonitoring, startReviewGateIntegration } = require("./ipc"
 const { openReviewGatePopup } = require("./webview");
 
 function activate(context) {
-  console.log("Review Gate V2 extension is now active in Cursor for MCP integration!");
+  console.log("Review Gate V3 extension is now active in Cursor for MCP integration!");
 
   // Create output channel for logging
-  state.outputChannel = vscode.window.createOutputChannel("Review Gate V2 ゲート");
+  state.outputChannel = vscode.window.createOutputChannel("Review Gate V3");
   context.subscriptions.push(state.outputChannel);
 
   // Register command to open Review Gate manually
   let disposable = vscode.commands.registerCommand("reviewGate.openChat", () => {
     openReviewGatePopup(context, {
-      message: "Welcome to Review Gate V2! Please provide your review or feedback.",
+      message: "Welcome to Review Gate V3! Please provide your review or feedback.",
       title: "Review Gate",
     });
   });
@@ -27,7 +27,7 @@ function activate(context) {
   startReviewGateIntegration(context);
 
   vscode.window.showInformationMessage(
-    "Review Gate V2 activated! Use Cmd+Shift+R or wait for MCP tool calls."
+    "Review Gate V3 activated! Use Cmd+Shift+R or wait for MCP tool calls."
   );
 }
 

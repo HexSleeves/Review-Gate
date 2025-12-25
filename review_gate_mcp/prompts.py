@@ -1,5 +1,5 @@
 """
-MCP Prompts implementation for Review Gate V2.
+MCP Prompts implementation for Review Gate V3.
 Provides pre-built prompt templates for common review scenarios.
 """
 import json

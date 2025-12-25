@@ -44,7 +44,7 @@ class ReviewGateServer:
 
     def setup_handlers(self):
         """Set up MCP request handlers"""
-        
+
         @self.server.list_tools()
         async def list_tools() -> List[Tool]:
             """List available Review Gate tools for Cursor Agent"""
@@ -64,7 +64,7 @@ class ReviewGateServer:
                             "title": {
                                 "type": "string",
                                 "description": "Title for the Review Gate popup window",
-                                "default": "Review Gate V2 - ゲート"
+                                "default": "Review Gate V3"
                             },
                             "context": {
                                 "type": "string",
@@ -273,7 +273,7 @@ class ReviewGateServer:
     async def _handle_review_gate_chat(self, args: dict) -> List[TextContent]:
         """Handle Review Gate chat popup and wait for user input with 5 minute timeout"""
         message = args.get("message", "Please provide your review or feedback:")
-        title = args.get("title", "Review Gate V2 - ゲート")
+        title = args.get("title", "Review Gate V3")
         context = args.get("context", "")
         urgent = args.get("urgent", False)
         session_uuid = args.get("session_uuid", "")
@@ -681,7 +681,7 @@ class ReviewGateServer:
     async def _handle_get_status(self, args: dict) -> List[TextContent]:
         """Handle status retrieval requests."""
         status = {
-            "server": "Review Gate V2",
+            "server": "Review Gate V3",
             "version": "2.0.0",
             "status": "active",
             "timestamp": datetime.now().isoformat(),
@@ -732,8 +732,8 @@ class ReviewGateServer:
             logger.warning("⚠️ Continuing without database - conversation history will not be persisted")
 
         async with stdio_server() as (read_stream, write_stream):
-            logger.info("✅ Review Gate v2 server ACTIVE on stdio transport for Cursor")
-            
+            logger.info("✅ Review Gate V3 server ACTIVE on stdio transport for Cursor")
+
             # Create server run task
             server_task = asyncio.create_task(
                 self.server.run(
@@ -742,19 +742,19 @@ class ReviewGateServer:
                     self.server.create_initialization_options()
                 )
             )
-            
+
             # Create shutdown monitor task
             shutdown_task = asyncio.create_task(self._monitor_shutdown())
-            
+
             # Create heartbeat task to keep log file fresh for extension status monitoring
             heartbeat_task = asyncio.create_task(self._heartbeat_logger())
-            
+
             # Wait for either server completion or shutdown request
             done, pending = await asyncio.wait(
                 [server_task, shutdown_task, heartbeat_task],
                 return_when=asyncio.FIRST_COMPLETED
             )
-            
+
             # Cancel any pending tasks
             for task in pending:
                 task.cancel()
@@ -762,37 +762,37 @@ class ReviewGateServer:
                     await task
                 except asyncio.CancelledError:
                     pass
-            
+
             if self.shutdown_requested:
-                logger.info(f"🛑 Review Gate v2 server shutting down: {self.shutdown_reason}")
+                logger.info(f"🛑 Review Gate V3 server shutting down: {self.shutdown_reason}")
             else:
-                logger.info("🏁 Review Gate v2 server completed normally")
+                logger.info("🏁 Review Gate V3 server completed normally")
 
     async def _heartbeat_logger(self):
         """Periodically update log file to keep MCP status active in extension"""
         logger.info("💓 Starting heartbeat logger for extension status monitoring")
         heartbeat_count = 0
-        
+
         while not self.shutdown_requested:
             try:
                 # Update log every 10 seconds to keep file modification time fresh
                 await asyncio.sleep(10)
                 heartbeat_count += 1
-                
+
                 # Write heartbeat to log
                 logger.info(f"💓 MCP heartbeat #{heartbeat_count} - Server is active and ready")
-                
+
                 # Force log flush to ensure file is updated
                 for handler in logger.handlers:
                     if hasattr(handler, 'flush'):
                         handler.flush()
-                        
+
             except Exception as e:
                 logger.error(f"❌ Heartbeat error: {e}")
                 await asyncio.sleep(5)
-        
+
         logger.info("💔 Heartbeat logger stopped")
-    
+
     async def _monitor_shutdown(self):
         """Monitor for shutdown requests in a separate task"""
         # This implementation simply waits forever unless external shutdown is requested
@@ -803,9 +803,9 @@ class ReviewGateServer:
         # But wait, I should probably implement the other tools too if they were important.
         # For now, I only implemented 'review_gate_chat' as it was the main one shown in list_tools
         # in the original file I read.
-        
+
         # Checking the original file again...
-        # list_tools() only listed 'review_gate_chat'. 
+        # list_tools() only listed 'review_gate_chat'.
         # But 'call_tool' had handling for 'review_gate_chat'.
         # However, '_handle_unified_review_gate' and others were defined but seemingly not exposed in list_tools?
         # Ah, I see:
@@ -815,14 +815,14 @@ class ReviewGateServer:
         # Let's check call_tool again in original file.
         # if name == "review_gate_chat": return await self._handle_review_gate_chat(arguments)
         # else: logger.error...
-        
-        # So yes, only `review_gate_chat` was actually exposed and working. 
+
+        # So yes, only `review_gate_chat` was actually exposed and working.
         # The other methods were likely dead code or for future use.
         # I will stick to what was exposed.
-        
+
         while not self.shutdown_requested:
             await asyncio.sleep(1)
-        
+
         # Cleanup
         logger.info("🧹 Performing cleanup operations before shutdown...")
         self.ipc.cleanup_temp_files()

@@ -35,7 +35,7 @@
     "commands": [
       {
         "command": "reviewGate.openChat",
-        "title": "Open Review Gate v2",
+        "title": "Open Review Gate V3",
         "category": "Review Gate"
       }
     ],

@@ -111,7 +111,7 @@ function startReviewGateIntegration(context) {
     checkTriggerFile(context, triggerFilePath);
   }, 100);
 
-  vscode.window.showInformationMessage("Review Gate V2 MCP integration ready!");
+  vscode.window.showInformationMessage("Review Gate V3 MCP integration ready!");
 }
 
 function checkProgressFile() {
@@ -201,7 +201,7 @@ function handleReviewGateToolCall(context, toolData) {
     case "review_gate_chat":
       popupOptions = {
         message: toolData.message || "Please provide your review or feedback:",
-        title: toolData.title || "Review Gate V2",
+        title: toolData.title || "Review Gate V3",
         autoFocus: true,
         toolData: toolData,
         mcpIntegration: true,
@@ -212,7 +212,7 @@ function handleReviewGateToolCall(context, toolData) {
     default:
       popupOptions = {
         message: toolData.message || "Cursor Agent needs your input.",
-        title: "Review Gate V2",
+        title: "Review Gate V3",
         autoFocus: true,
         toolData: toolData,
         mcpIntegration: true,
