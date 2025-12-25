@@ -1,13 +1,13 @@
 {
-  "name": "review-gate-v2",
-  "displayName": "Review Gate V2 ゲート",
+  "name": "review-gate-v3",
+  "displayName": "Review Gate V3",
   "description": "Advanced Review Gate system with MCP integration for Cursor IDE",
   "version": "3.0.0",
-  "author": "Lakshman Turlapati",
-  "publisher": "LakshmanTurlapati",
+  "author": "HexSleeves",
+  "publisher": "HexSleeves",
   "icon": "icon.png",
   "engines": {
-    "vscode": "^1.60.0"
+    "vscode": "^1.105.1"
   },
   "categories": [
     "Other",
@@ -50,15 +50,25 @@
     ]
   },
   "scripts": {
+    "compile": "npm run check-types && node esbuild.js",
+    "check-types": "tsc --noEmit",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
     "vscode:prepublish": "npm run package",
-    "compile": "node esbuild.js",
-    "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "format": "prettier --write \"src/**/*.{js,json,css}\"",
+    "format:check": "prettier --check \"src/**/*.{js,json,css}\""
   },
   "devDependencies": {
-    "@vscode/vsce": "^2.32.0",
-    "eslint": "^8.56.0",
-    "esbuild": "^0.24.0"
+    "@eslint/css": "^0.14.1",
+    "@eslint/js": "^9.39.2",
+    "@eslint/json": "^0.14.0",
+    "@vscode/vsce": "^3.7.1",
+    "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.5.0",
+    "prettier": "4.0.0-alpha.13"
   }
 }

@@ -1,10 +1,10 @@
-const vscode = require("vscode");
-const fs = require("fs");
-const path = require("path");
-const state = require("./state");
-const { logUserInput, logMessage } = require("./logger");
-const { startNodeRecording, stopNodeRecording } = require("./audio");
-const { getMimeType } = require("./utils");
+import fs from "node:fs";
+import path from "node:path";
+import state from "./state";
+import { logUserInput } from "./logger";
+import { startNodeRecording, stopNodeRecording } from "./audio";
+import { getMimeType } from "./utils";
+import vscode from "vscode";
 
 function openReviewGatePopup(context, options = {}) {
   const {
@@ -67,16 +67,13 @@ function openReviewGatePopup(context, options = {}) {
   state.chatPanel.webview.onDidReceiveMessage(
     (webviewMessage) => {
       // Get trigger ID from current trigger data or passed options
-      const currentTriggerId =
-        (state.currentTriggerData && state.currentTriggerData.trigger_id) ||
-        triggerId;
+      const currentTriggerId = state.currentTriggerData?.trigger_id || triggerId;
 
       switch (webviewMessage.command) {
-        case "send":
+        case "send": {
           // Log the user input and write response file for MCP integration
-          const eventType = mcpIntegration
-            ? "MCP_RESPONSE"
-            : "REVIEW_SUBMITTED";
+          const eventType = mcpIntegration ? "MCP_RESPONSE" : "REVIEW_SUBMITTED";
+
           logUserInput(
             webviewMessage.text,
             eventType,
@@ -92,20 +89,13 @@ function openReviewGatePopup(context, options = {}) {
             specialHandling
           );
           break;
+        }
         case "attach":
-          logUserInput(
-            "User clicked attachment button",
-            "ATTACHMENT_CLICK",
-            currentTriggerId
-          );
+          logUserInput("User clicked attachment button", "ATTACHMENT_CLICK", currentTriggerId);
           handleFileAttachment(currentTriggerId);
           break;
         case "uploadImage":
-          logUserInput(
-            "User clicked image upload button",
-            "IMAGE_UPLOAD_CLICK",
-            currentTriggerId
-          );
+          logUserInput("User clicked image upload button", "IMAGE_UPLOAD_CLICK", currentTriggerId);
           handleImageUpload(currentTriggerId);
           break;
         case "logPastedImage":
@@ -130,19 +120,11 @@ function openReviewGatePopup(context, options = {}) {
           );
           break;
         case "startRecording":
-          logUserInput(
-            "User started speech recording",
-            "SPEECH_START",
-            currentTriggerId
-          );
+          logUserInput("User started speech recording", "SPEECH_START", currentTriggerId);
           startNodeRecording(currentTriggerId);
           break;
         case "stopRecording":
-          logUserInput(
-            "User stopped speech recording",
-            "SPEECH_STOP",
-            currentTriggerId
-          );
+          logUserInput("User stopped speech recording", "SPEECH_STOP", currentTriggerId);
           stopNodeRecording(currentTriggerId);
           break;
         case "showError":
@@ -154,17 +136,14 @@ function openReviewGatePopup(context, options = {}) {
             command: "updateMcpStatus",
             active: mcpIntegration ? true : state.mcpStatus,
           });
-          // Only send welcome message for manual opens, not MCP tool calls
-          if (
-            message &&
-            !mcpIntegration &&
-            !message.includes("I have completed")
-          ) {
+          // Send message for both manual opens AND MCP tool calls
+          // For MCP, show as assistant message; for manual, show as system message
+          if (message && !message.includes("I have completed")) {
             state.chatPanel.webview.postMessage({
               command: "addMessage",
               text: message,
-              type: "system",
-              plain: true,
+              type: mcpIntegration ? "assistant" : "system",
+              plain: !mcpIntegration,
               toolData: toolData,
               mcpIntegration: mcpIntegration,
               triggerId: triggerId,
@@ -198,13 +177,7 @@ function openReviewGatePopup(context, options = {}) {
   }
 }
 
-function handleReviewMessage(
-  text,
-  attachments,
-  triggerId,
-  mcpIntegration,
-  specialHandling
-) {
+function handleReviewMessage(text, attachments, triggerId, mcpIntegration, specialHandling) {
   const funnyResponses = [
     "Review sent - Hold on to your pants until the review gate is called again! 🎢",
     "Message delivered! Agent is probably doing agent things now... ⚡",
@@ -230,8 +203,7 @@ function handleReviewMessage(
   if (state.chatPanel) {
     setTimeout(() => {
       // Pick a random funny response
-      const randomResponse =
-        funnyResponses[Math.floor(Math.random() * funnyResponses.length)];
+      const randomResponse = funnyResponses[Math.floor(Math.random() * funnyResponses.length)];
 
       state.chatPanel.webview.postMessage({
         command: "addMessage",
@@ -254,11 +226,7 @@ function handleReviewMessage(
 }
 
 function handleFileAttachment(triggerId) {
-  logUserInput(
-    "User requested file attachment for review",
-    "FILE_ATTACHMENT",
-    triggerId
-  );
+  logUserInput("User requested file attachment for review", "FILE_ATTACHMENT", triggerId);
 
   vscode.window
     .showOpenDialog({
@@ -284,28 +252,18 @@ function handleFileAttachment(triggerId) {
             command: "addMessage",
             text: `Files attached for review:\n${fileNames
               .map((name) => "• " + name)
-              .join("\n")}\n\nPaths:\n${filePaths
-              .map((fp) => "• " + fp)
-              .join("\n")}`,
+              .join("\n")}\n\nPaths:\n${filePaths.map((fp) => "• " + fp).join("\n")}`,
             type: "system",
           });
         }
       } else {
-        logUserInput(
-          "No files selected for review",
-          "FILE_CANCELLED",
-          triggerId
-        );
+        logUserInput("No files selected for review", "FILE_CANCELLED", triggerId);
       }
     });
 }
 
 function handleImageUpload(triggerId) {
-  logUserInput(
-    "User requested image upload for review",
-    "IMAGE_UPLOAD",
-    triggerId
-  );
+  logUserInput("User requested image upload for review", "IMAGE_UPLOAD", triggerId);
 
   vscode.window
     .showOpenDialog({
@@ -337,11 +295,7 @@ function handleImageUpload(triggerId) {
               size: imageBuffer.length,
             };
 
-            logUserInput(
-              `Image uploaded: ${fileName}`,
-              "IMAGE_UPLOADED",
-              triggerId
-            );
+            logUserInput(`Image uploaded: ${fileName}`, "IMAGE_UPLOADED", triggerId);
 
             // Send image data to webview
             if (state.chatPanel) {
@@ -352,17 +306,11 @@ function handleImageUpload(triggerId) {
             }
           } catch (error) {
             console.log(`Error processing image ${fileName}: ${error.message}`);
-            vscode.window.showErrorMessage(
-              `Failed to process image: ${fileName}`
-            );
+            vscode.window.showErrorMessage(`Failed to process image: ${fileName}`);
           }
         });
       } else {
-        logUserInput(
-          "No images selected for upload",
-          "IMAGE_CANCELLED",
-          triggerId
-        );
+        logUserInput("No images selected for upload", "IMAGE_CANCELLED", triggerId);
       }
     });
 }
@@ -478,6 +426,17 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
 
         .message.user {
             justify-content: flex-end;
+        }
+
+        .message.assistant {
+            justify-content: flex-start;
+        }
+
+        .message.assistant .message-bubble {
+            background: var(--vscode-textCodeBlock-background);
+            color: var(--vscode-textCodeBlock-foreground);
+            border-bottom-left-radius: 6px;
+            border: 1px solid var(--vscode-panel-border);
         }
 
         .message-bubble {

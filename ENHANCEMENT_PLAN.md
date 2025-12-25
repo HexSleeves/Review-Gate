@@ -82,6 +82,7 @@
 **Goal**: Enable agents to access review history and configuration as MCP resources
 
 **Tasks**:
+
 1. Add `resources` capability to server initialization
 2. Implement `resources/list` handler to expose:
    - Conversation history resources
@@ -98,6 +99,7 @@
 8. Write unit tests for resource handlers
 
 **Done when**:
+
 - Cursor can enumerate Review Gate resources
 - Agent can read conversation history via `resources/read`
 - Subscribed clients receive update notifications
@@ -110,6 +112,7 @@
 **Goal**: Provide pre-built prompt templates for common review scenarios
 
 **Tasks**:
+
 1. Add `prompts` capability to server initialization
 2. Implement `prompts/list` handler to expose:
    - `code_review` - Comprehensive code review prompt
@@ -127,6 +130,7 @@
 7. Write unit tests for prompt handlers
 
 **Done when**:
+
 - Prompts appear as slash commands in Cursor
 - Each prompt returns properly formatted messages
 - Arguments are correctly validated and substituted
@@ -139,6 +143,7 @@
 **Goal**: Support UUID-based session management with isolated conversation contexts
 
 **Tasks**:
+
 1. Create `SessionManager` class to manage session state:
    - Generate UUID on first tool call per conversation
    - Store session in database with created_at timestamp
@@ -159,6 +164,7 @@
 7. Write tests for session management
 
 **Done when**:
+
 - Sessions are automatically created on first tool call
 - Sessions properly timeout and cleanup
 - Heartbeat detection works for extension disconnect
@@ -173,6 +179,7 @@
 **Goal**: Add tools for agent state management and progress tracking
 
 **Tasks**:
+
 1. Implement `review_gate_update_progress` tool:
    - Parameters: `progress_percent`, `status_message`, `step_name`
    - Updates popup with progress bar
@@ -192,6 +199,7 @@
 7. Write unit and integration tests
 
 **Done when**:
+
 - Agents can report progress visible to users
 - Checkpoints can be created and restored
 - Context tool returns accurate history
@@ -204,6 +212,7 @@
 **Goal**: Allow users to customize Review Gate without editing files
 
 **Tasks**:
+
 1. Create `config.yaml` structure with:
    - Timeout settings
    - Storage paths
@@ -222,6 +231,7 @@
 8. Write tests for configuration handling
 
 **Done when**:
+
 - Users can change settings via UI
 - Configuration persists across sessions
 - Invalid values are rejected with helpful messages
@@ -453,38 +463,48 @@ Note: Using standard `file://` scheme with virtual paths per MCP specification.
 ### Built-in Prompts
 
 #### 1. `code_review`
+
 Reviews code for quality, maintainability, and best practices.
 
 **Arguments**:
+
 - `file_path` (optional): Specific file to review
 - `focus_areas` (optional): Array of areas (e.g., ["security", "performance"])
 - `severity_level` (optional): "error", "warning", or "info"
 
 #### 2. `security_review`
+
 Security-focused code review.
 
 **Arguments**:
+
 - `file_path` (optional): Specific file to review
 - `threat_model` (optional): Include threat modeling analysis
 
 #### 3. `performance_review`
+
 Performance optimization review.
 
 **Arguments**:
+
 - `file_path` (optional): Specific file to review
 - `profile_data` (optional): Include performance profiling
 
 #### 4. `documentation_check`
+
 Documentation completeness check.
 
 **Arguments**:
+
 - `file_path` (optional): Specific file to check
 - `standards` (optional): Documentation standard to follow
 
 #### 5. `testing_review`
+
 Test coverage and quality review.
 
 **Arguments**:
+
 - `file_path` (optional): Specific file to review
 - `coverage_threshold` (optional): Minimum coverage percentage
 
@@ -493,6 +513,7 @@ Test coverage and quality review.
 ### New Tools
 
 #### `review_gate_update_progress`
+
 ```python
 {
     "name": "review_gate_update_progress",
@@ -520,6 +541,7 @@ Test coverage and quality review.
 ```
 
 #### `review_gate_create_checkpoint`
+
 ```python
 {
     "name": "review_gate_create_checkpoint",
@@ -542,6 +564,7 @@ Test coverage and quality review.
 ```
 
 #### `review_gate_restore_checkpoint`
+
 ```python
 {
     "name": "review_gate_restore_checkpoint",
@@ -562,18 +585,21 @@ Test coverage and quality review.
 ## Testing Strategy
 
 ### Unit Tests
+
 - Each MCP handler (tools, resources, prompts)
 - Database operations
 - Session management
 - Template rendering
 
 ### Integration Tests
+
 - End-to-end tool call flows
 - Multi-agent scenarios
 - Resource subscription notifications
 - Prompt argument substitution
 
 ### Manual Tests
+
 - Cursor extension integration
 - Popup UI rendering
 - Configuration changes
@@ -586,40 +612,50 @@ The following issues were identified during plan review and have been addressed:
 ### Critical Issues (Must Address Before Implementation)
 
 #### 1. Agent ID Source Clarification
+
 **Issue**: Original plan had no clear source for `agent_id` - Cursor MCP doesn't provide agent identity.
 **Resolution**:
+
 - Use UUID-based session identifiers instead of agent tracking
 - Generate session ID on first tool call from a conversation
 - Track sessions by conversation UUID, not agent identity
 - Sessions are implicitly per-conversation since Cursor agents operate in single-threaded conversation context
 
 #### 2. SQLite WAL Mode Network Filesystem Incompatibility
+
 **Issue**: WAL mode fails on network filesystems (NFS, SMB).
 **Resolution**:
+
 - Detect filesystem type at initialization
 - Use WAL mode only on local filesystems
 - Fall back to journal mode on network filesystems
 - Add filesystem detection utility in `database.py`
 
 #### 3. Custom URI Scheme Non-Compliance
+
 **Issue**: Custom `review-gate://` scheme conflicts with MCP spec recommendation to use standard schemes.
 **Resolution**:
+
 - Use `file://` scheme with custom path structure for resources
 - Format: `file://review-gate/conversations/{id}`
 - Format: `file://review-gate/templates/{name}`
 - Maintain compatibility with MCP client expectations
 
 #### 4. Missing Migration Runner
+
 **Issue**: Plan included migration files but no mechanism to run them.
 **Resolution**:
+
 - Add migration runner in Stage 1 tasks
 - Implement automatic migration on server startup
 - Track applied migrations in `schema_migrations` table
 - Support both forward and rollback migrations
 
 #### 5. IPC Disconnect Detection
+
 **Issue**: No mechanism to detect when Cursor extension disconnects.
 **Resolution**:
+
 - Implement heartbeat file from extension to server
 - Server monitors heartbeat file with 30-second timeout
 - Missing heartbeat triggers session cleanup
@@ -628,31 +664,41 @@ The following issues were identified during plan review and have been addressed:
 ### Missing Considerations (Now Addressed)
 
 #### 6. Database Connection Pooling
+
 **Added**:
+
 - Use `aiosqlite` for async database operations
 - Single connection with async queue is sufficient for single-threaded MCP server
 - Connection retry logic with exponential backoff
 
 #### 7. SQL Injection Prevention
+
 **Added**:
+
 - All database operations MUST use parameterized queries
 - ORM-like wrapper for common operations to prevent raw SQL
 - Input validation layer for all user-provided data
 
 #### 8. Rollback Strategy
+
 **Added**:
+
 - Database transaction wrapper for multi-step operations
 - Automatic rollback on exceptions
 - Migration rollback support
 
 #### 9. Memory Leak Prevention
+
 **Added**:
+
 - Conversation history pagination (max 50 messages per page)
 - Automatic cleanup of completed sessions after 1 hour
 - Attachment size limits (max 10MB per attachment)
 
 #### 10. MCP Version Pinning
+
 **Added**:
+
 - Pin `mcp` package to specific version in requirements.txt
 - Version compatibility check on server startup
 - Graceful degradation if MCP protocol version mismatch
@@ -660,6 +706,7 @@ The following issues were identified during plan review and have been addressed:
 ### Updated Architecture Decisions
 
 #### Session Management (Simplified)
+
 ```
 Original: Track by agent_id (unavailable)
 Revised: Track by session_uuid generated per conversation
@@ -672,6 +719,7 @@ Flow:
 ```
 
 #### Database Layer (Enhanced)
+
 ```python
 # New: database.py with migration support
 class Database:
@@ -692,6 +740,7 @@ class Database:
 ```
 
 #### Resource URIs (Corrected)
+
 ```
 Original (non-compliant): review-gate://conversations/{id}
 Revised (MCP compliant): file://review-gate/conversations/{id}
@@ -705,6 +754,7 @@ Implementation detail:
 ### Additional Implementation Details Added
 
 #### Migration System
+
 ```
 migrations/
 ├── runner.py              # Migration execution engine
@@ -715,6 +765,7 @@ migrations/
 ```
 
 #### Heartbeat Protocol
+
 ```
 Extension → Server: Write to review_gate_heartbeat.json every 10s
 Server: Monitor heartbeat file every 5s
@@ -724,6 +775,7 @@ Timeout: 30s without update → Mark sessions as stale
 ### Updated Stage 1 Tasks
 
 Modified to include:
+
 - Migration runner implementation
 - Filesystem detection for WAL mode decision
 - Heartbeat monitoring for disconnect detection
