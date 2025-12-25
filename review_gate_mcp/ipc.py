@@ -311,3 +311,64 @@ class IPCManager:
                     
         except Exception as e:
             logger.warning(f"⚠️ Cleanup warning: {e}")
+
+    async def send_progress_update(
+        self,
+        title: str = "Processing...",
+        percentage: float = 0,
+        step: str = "Starting...",
+        status: str = "active"
+    ) -> bool:
+        """
+        Send a progress update to the Cursor extension webview.
+
+        Args:
+            title: Overall task title (e.g., "Analyzing Code")
+            percentage: Progress percentage (0-100)
+            step: Current step description (e.g., "Scanning files...")
+            status: Status - 'active' or 'completed'
+
+        Returns:
+            True if progress update was sent successfully
+        """
+        try:
+            progress_file = Path(get_temp_path("review_gate_progress.json"))
+
+            progress_data = {
+                "timestamp": datetime.now().isoformat(),
+                "system": "review-gate-v2",
+                "type": "progress_update",
+                "data": {
+                    "title": title,
+                    "percentage": percentage,
+                    "step": step,
+                    "status": status
+                }
+            }
+
+            logger.debug(f"📊 Sending progress update: {percentage}% - {step}")
+
+            progress_file.write_text(json.dumps(progress_data, indent=2))
+
+            # Force sync
+            try:
+                os.sync()
+            except:
+                pass
+
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Failed to send progress update: {e}")
+            return False
+
+    async def clear_progress(self) -> bool:
+        """Clear the progress indicator in the Cursor extension."""
+        try:
+            progress_file = Path(get_temp_path("review_gate_progress.json"))
+            if progress_file.exists():
+                progress_file.unlink()
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to clear progress: {e}")
+            return False

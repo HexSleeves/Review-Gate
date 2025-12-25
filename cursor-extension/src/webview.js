@@ -818,9 +818,205 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         .remove-image-btn:active {
             transform: scale(0.95);
         }
+
+        /* Progress Bar Component */
+        .progress-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: var(--vscode-panel-background);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            z-index: 1000;
+            animation: slideDown 0.3s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .progress-overlay.closing {
+            animation: slideUp 0.3s ease-out forwards;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 1;
+                transform: translateY(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-100%);
+            }
+        }
+
+        .progress-container {
+            padding: 12px 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .progress-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .progress-icon {
+            font-size: 12px;
+            color: var(--vscode-charts-blue);
+        }
+
+        .progress-icon.completed {
+            color: var(--vscode-charts-green);
+        }
+
+        .progress-percentage {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            font-family: var(--vscode-editor-font-family);
+        }
+
+        .progress-bar-wrapper {
+            height: 6px;
+            background: var(--vscode-progressBar-background);
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--vscode-charts-blue), var(--vscode-charts-purple));
+            border-radius: 3px;
+            transition: width 0.3s ease-out;
+            position: relative;
+            min-width: 0%;
+        }
+
+        .progress-bar-fill.completed {
+            background: linear-gradient(90deg, var(--vscode-charts-green), var(--vscode-charts-teal));
+        }
+
+        .progress-bar-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+            );
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .progress-bar-fill.completed::after {
+            animation: none;
+        }
+
+        .progress-step {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .progress-step-indicator {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--vscode-charts-blue);
+            flex-shrink: 0;
+        }
+
+        .progress-step-indicator.completed {
+            background: var(--vscode-charts-green);
+        }
+
+        .progress-close {
+            background: none;
+            border: none;
+            color: var(--vscode-foreground);
+            cursor: pointer;
+            font-size: 12px;
+            padding: 4px;
+            border-radius: 4px;
+            opacity: 0.6;
+            transition: all 0.2s ease;
+            margin-left: 8px;
+        }
+
+        .progress-close:hover {
+            background: var(--vscode-button-hoverBackground);
+            opacity: 1;
+        }
+
+        .progress-eta {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-left: auto;
+        }
+
+        /* Adjust main container when progress is shown */
+        body.has-progress .review-container {
+            padding-top: 80px;
+        }
     </style>
 </head>
 <body>
+    <!-- Progress Bar Overlay -->
+    <div class="progress-overlay" id="progressOverlay" style="display: none;">
+        <div class="progress-container">
+            <div class="progress-header">
+                <div class="progress-title">
+                    <i class="fas fa-spinner progress-icon" id="progressIcon"></i>
+                    <span id="progressTitle">Processing...</span>
+                </div>
+                <div class="progress-percentage" id="progressPercentage">0%</div>
+            </div>
+            <div class="progress-bar-wrapper">
+                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
+            </div>
+            <div class="progress-step">
+                <div class="progress-step-indicator" id="progressStepIndicator"></div>
+                <span id="progressStep">Initializing...</span>
+                <span class="progress-eta" id="progressEta"></span>
+                <button class="progress-close" id="progressClose" title="Hide progress">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div class="review-container">
         <div class="review-header">
             <div class="review-title">${title}</div>
@@ -875,6 +1071,17 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
         const mcpStatus = document.getElementById('mcpStatus');
         const inputContainer = document.getElementById('inputContainer');
 
+        // Progress bar elements
+        const progressOverlay = document.getElementById('progressOverlay');
+        const progressIcon = document.getElementById('progressIcon');
+        const progressTitle = document.getElementById('progressTitle');
+        const progressPercentage = document.getElementById('progressPercentage');
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressStep = document.getElementById('progressStep');
+        const progressStepIndicator = document.getElementById('progressStepIndicator');
+        const progressEta = document.getElementById('progressEta');
+        const progressClose = document.getElementById('progressClose');
+
         let messageCount = 0;
         let mcpActive = true; // Default to true for better UX
         let mcpIntegration = ${mcpIntegration};
@@ -903,6 +1110,123 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
                 messageInput.placeholder = 'MCP server is not active. Please start the server to enable input.';
             }
         }
+
+        // Progress Bar Functions
+        let progressState = {
+            visible: false,
+            percentage: 0,
+            title: 'Processing...',
+            step: 'Initializing...',
+            status: 'active', // 'active' or 'completed'
+            startTime: null,
+            lastUpdateTime: null
+        };
+
+        function showProgress(data) {
+            const {
+                title = 'Processing...',
+                percentage = 0,
+                step = 'Starting...',
+                status = 'active'
+            } = data;
+
+            // Update state
+            progressState.title = title;
+            progressState.percentage = Math.min(100, Math.max(0, percentage));
+            progressState.step = step;
+            progressState.status = status;
+
+            // Set start time if this is the first update
+            if (!progressState.startTime) {
+                progressState.startTime = Date.now();
+            }
+            progressState.lastUpdateTime = Date.now();
+
+            // Show overlay
+            progressOverlay.style.display = 'block';
+            document.body.classList.add('has-progress');
+            progressState.visible = true;
+
+            // Update UI
+            updateProgressUI();
+
+            // Auto-hide when complete
+            if (status === 'completed' && percentage >= 100) {
+                setTimeout(() => {
+                    hideProgress();
+                }, 3000);
+            }
+        }
+
+        function updateProgressUI() {
+            // Update title
+            progressTitle.textContent = progressState.title;
+
+            // Update percentage
+            const pct = Math.round(progressState.percentage);
+            progressPercentage.textContent = pct + '%';
+            progressBarFill.style.width = pct + '%';
+
+            // Update step
+            progressStep.textContent = progressState.step;
+
+            // Update icon based on status
+            if (progressState.status === 'completed' || progressState.percentage >= 100) {
+                progressIcon.className = 'fas fa-check-circle progress-icon completed';
+                progressStepIndicator.classList.add('completed');
+                progressBarFill.classList.add('completed');
+            } else {
+                progressIcon.className = 'fas fa-spinner progress-icon';
+                progressStepIndicator.classList.remove('completed');
+                progressBarFill.classList.remove('completed');
+            }
+
+            // Calculate and display ETA
+            if (progressState.startTime && progressState.percentage > 0 && progressState.percentage < 100) {
+                const elapsed = Date.now() - progressState.startTime;
+                const rate = progressState.percentage / elapsed;
+                const remaining = (100 - progressState.percentage) / rate;
+                const etaSeconds = Math.round(remaining / 1000);
+
+                if (etaSeconds > 0) {
+                    if (etaSeconds < 60) {
+                        progressEta.textContent = '~' + etaSeconds + 's remaining';
+                    } else {
+                        const mins = Math.ceil(etaSeconds / 60);
+                        progressEta.textContent = '~' + mins + 'm remaining';
+                    }
+                } else {
+                    progressEta.textContent = '';
+                }
+            } else {
+                progressEta.textContent = '';
+            }
+        }
+
+        function hideProgress() {
+            progressOverlay.classList.add('closing');
+            setTimeout(() => {
+                progressOverlay.style.display = 'none';
+                progressOverlay.classList.remove('closing');
+                document.body.classList.remove('has-progress');
+                progressState.visible = false;
+            }, 300);
+        }
+
+        function resetProgressState() {
+            progressState = {
+                visible: false,
+                percentage: 0,
+                title: 'Processing...',
+                step: 'Initializing...',
+                status: 'active',
+                startTime: null,
+                lastUpdateTime: null
+            };
+        }
+
+        // Progress close button handler
+        progressClose.addEventListener('click', hideProgress);
 
         function addMessage(text, type = 'user', toolData = null, plain = false, isError = false) {
             messageCount++;
@@ -1338,6 +1662,15 @@ function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
             const message = event.data;
 
             switch (message.command) {
+                case 'updateProgress':
+                    showProgress(message.data || {});
+                    break;
+                case 'hideProgress':
+                    hideProgress();
+                    break;
+                case 'resetProgress':
+                    resetProgressState();
+                    break;
                 case 'addMessage':
                     addMessage(message.text, message.type || 'system', message.toolData, message.plain || false);
                     break;

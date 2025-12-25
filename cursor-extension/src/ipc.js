@@ -74,25 +74,28 @@ function updateChatPanelStatus() {
 function startReviewGateIntegration(context) {
     // Watch for Review Gate trigger file
     const triggerFilePath = getTempPath('review_gate_trigger.json');
-    
+
     // Check for existing trigger file first
     checkTriggerFile(context, triggerFilePath);
-    
+
     // Use a more robust polling approach
     const pollInterval = setInterval(() => {
         // Check main trigger file
         checkTriggerFile(context, triggerFilePath);
-        
+
         // Check backup trigger files
         for (let i = 0; i < 3; i++) {
             const backupTriggerPath = getTempPath(`review_gate_trigger_${i}.json`);
             checkTriggerFile(context, backupTriggerPath);
         }
+
+        // Check progress update file
+        checkProgressFile();
     }, 250); // Check every 250ms
-    
+
     // Store the interval for cleanup
     state.reviewGateWatcher = pollInterval;
-    
+
     // Add to context subscriptions for proper cleanup
     context.subscriptions.push({
         dispose: () => {
@@ -101,13 +104,57 @@ function startReviewGateIntegration(context) {
             }
         }
     });
-    
+
     // Immediate check on startup
     setTimeout(() => {
         checkTriggerFile(context, triggerFilePath);
     }, 100);
-    
+
     vscode.window.showInformationMessage('Review Gate V2 MCP integration ready!');
+}
+
+function checkProgressFile() {
+    try {
+        const progressFilePath = getTempPath('review_gate_progress.json');
+
+        if (fs.existsSync(progressFilePath)) {
+            const data = fs.readFileSync(progressFilePath, 'utf8');
+            const progressData = JSON.parse(data);
+
+            // Verify this is a progress update from Review Gate
+            if (progressData.type === 'progress_update' &&
+                progressData.system === 'review-gate-v2') {
+
+                const { title, percentage, step, status } = progressData.data;
+
+                console.log(`📊 Progress: ${percentage}% - ${step}`);
+
+                // Forward to webview if panel is open
+                if (state.chatPanel && state.chatPanel.webview) {
+                    state.chatPanel.webview.postMessage({
+                        command: 'updateProgress',
+                        data: {
+                            title,
+                            percentage,
+                            step,
+                            status
+                        }
+                    });
+                }
+            }
+
+            // Clean up progress file after reading
+            try {
+                fs.unlinkSync(progressFilePath);
+            } catch (cleanupError) {
+                // File may have been consumed already
+            }
+        }
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            console.log(`Error reading progress file: ${error.message}`);
+        }
+    }
 }
 
 function checkTriggerFile(context, filePath) {

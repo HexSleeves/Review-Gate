@@ -1,6 +1,7 @@
 .vscode/**
 .vscode-test/**
 src/**
+legacy/**
 .gitignore
 vsc-extension-quickstart.md
 esbuild.js
