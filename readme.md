@@ -71,7 +71,7 @@ npm run package
 
 ## Troubleshooting
 
-- Server log: `/tmp/review_gate_v2.log` on macOS/Linux, or the system temp dir on Windows
+- Server log: `/tmp/review_gate_v3.log` on macOS/Linux, or the system temp dir on Windows
 - Validate Python package startup:
 
 ```bash

@@ -6,9 +6,11 @@ from typing import Any, Dict, Iterable, Optional
 
 
 CANONICAL_SERVER_KEY = "review-gate-v3"
-LEGACY_SERVER_KEYS = ("review-gate-v2",)
-ALL_SERVER_KEYS = (CANONICAL_SERVER_KEY, *LEGACY_SERVER_KEYS)
 VSIX_GLOB = "review-gate-v3-*.vsix"
+
+
+def _is_review_gate_server_key(key: str) -> bool:
+    return key == CANONICAL_SERVER_KEY or key.startswith("review-gate-v")
 
 
 def discover_vsix(extension_dir: str) -> Optional[str]:
@@ -48,12 +50,10 @@ def merge_review_gate_server(
     merged = dict(config or {})
     servers = dict(merged.get("mcpServers", {}))
 
-    keys_to_remove = set(ALL_SERVER_KEYS)
-    if preserve_server_keys:
-        keys_to_remove -= set(preserve_server_keys)
-
-    for key in keys_to_remove:
-        servers.pop(key, None)
+    preserved_keys = set(preserve_server_keys or ())
+    for key in list(servers):
+        if _is_review_gate_server_key(key) and key not in preserved_keys:
+            servers.pop(key, None)
 
     servers[CANONICAL_SERVER_KEY] = build_server_entry(review_gate_dir)
     merged["mcpServers"] = servers
@@ -64,8 +64,9 @@ def remove_review_gate_servers(config: Optional[Dict[str, Any]]) -> Dict[str, An
     """Remove Review Gate MCP entries while preserving every other server."""
     cleaned = dict(config or {})
     servers = dict(cleaned.get("mcpServers", {}))
-    for key in ALL_SERVER_KEYS:
-        servers.pop(key, None)
+    for key in list(servers):
+        if _is_review_gate_server_key(key):
+            servers.pop(key, None)
     cleaned["mcpServers"] = servers
     return cleaned
 

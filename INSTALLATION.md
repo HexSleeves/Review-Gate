@@ -89,20 +89,20 @@ Otherwise, install the VSIX manually from Cursor:
 
 ### 6. Install the rule file
 
-Copy `ReviewGateV2.mdc` into your Cursor rules directory as `ReviewGate.mdc`.
+Copy `ReviewGateV3.mdc` into your Cursor rules directory as `ReviewGate.mdc`.
 
 macOS:
 
 ```bash
 mkdir -p "$HOME/Library/Application Support/Cursor/User/rules"
-cp ReviewGateV2.mdc "$HOME/Library/Application Support/Cursor/User/rules/ReviewGate.mdc"
+cp ReviewGateV3.mdc "$HOME/Library/Application Support/Cursor/User/rules/ReviewGate.mdc"
 ```
 
 Linux:
 
 ```bash
 mkdir -p "$HOME/.config/Cursor/User/rules"
-cp ReviewGateV2.mdc "$HOME/.config/Cursor/User/rules/ReviewGate.mdc"
+cp ReviewGateV3.mdc "$HOME/.config/Cursor/User/rules/ReviewGate.mdc"
 ```
 
 ## Verification

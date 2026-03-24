@@ -24,7 +24,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 CURSOR_MCP_FILE="${HOME}/.cursor/mcp.json"
 INSTALL_DIRS=(
   "${HOME}/cursor-extensions/review-gate-v3"
-  "${HOME}/cursor-extensions/review-gate-v2"
 )
 
 run_install_helper() {
@@ -80,7 +79,7 @@ log_success "Cleaned temporary Review Gate files"
 
 EXTENSION_REMOVED=false
 if command -v cursor &> /dev/null; then
-  for extension_id in review-gate-v3 review-gate-v2; do
+  for extension_id in review-gate-v3; do
     if cursor --uninstall-extension "${extension_id}" >/dev/null 2>&1; then
       EXTENSION_REMOVED=true
       log_success "Removed extension ${extension_id}"

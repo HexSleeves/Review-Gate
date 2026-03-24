@@ -35,7 +35,7 @@ The system uses a file-based Inter-Process Communication (IPC) mechanism to brid
 * `install.sh`: Automated installation script for macOS/Linux.
 * `install.ps1`: Automated installation script for Windows.
 * `pyproject.toml`: Python project configuration and dependencies.
-* `ReviewGateV2.mdc`: The Cursor rule file that instructs the AI to use the tool.
+* `ReviewGateV3.mdc`: The Cursor rule file that instructs the AI to use the tool.
 
 ## Building and Running
 
@@ -85,7 +85,7 @@ npm run package # Uses vsce package to create .vsix
 * **Modularization:** The project has been refactored from monolithic files into modular packages. New code should follow this structure.
 * **IPC Safety:** File operations for IPC use atomic writes or specific unique filenames where possible to avoid race conditions. Temporary files are cleaned up after use.
 * **Speech Handling:** Speech-to-text is an optional dependency (`faster-whisper`). The system should degrade gracefully if it is not available or if `onnxruntime` issues occur.
-* **Logging:** Both the MCP server and the Extension log to `review_gate_v2.log` in the temp directory for debugging.
+* **Logging:** Both the MCP server and the Extension log to `review_gate_v3.log` in the temp directory for debugging.
 
 ## Key Files
 

@@ -41,7 +41,7 @@ class IPCManager:
 
             trigger_data = {
                 "timestamp": datetime.now().isoformat(),
-                "system": "review-gate-v2",
+                "system": "review-gate-v3",
                 "editor": "cursor",
                 "data": data,
                 "pid": os.getpid(),
@@ -307,7 +307,7 @@ class IPCManager:
 
             progress_data = {
                 "timestamp": datetime.now().isoformat(),
-                "system": "review-gate-v2",
+                "system": "review-gate-v3",
                 "type": "progress_update",
                 "data": {
                     "title": title,

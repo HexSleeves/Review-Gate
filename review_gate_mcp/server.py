@@ -26,7 +26,7 @@ from .version import VERSION
 
 class ReviewGateServer:
     def __init__(self):
-        self.server = Server("review-gate-v2")
+        self.server = Server("review-gate-v3")
         self.ipc = IPCManager()
         self.shutdown_requested = False
         self.shutdown_reason = ""

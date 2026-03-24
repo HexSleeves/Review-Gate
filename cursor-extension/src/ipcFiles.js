@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const { getTempPath } = require("./utils");
 
-const REVIEW_GATE_PROTOCOL = "review-gate-v2";
+const REVIEW_GATE_PROTOCOL = "review-gate-v3";
 
 function getTriggerFilePath() {
   return getTempPath("review_gate_trigger.json");

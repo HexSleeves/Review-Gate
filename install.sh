@@ -22,7 +22,6 @@ log_step() { echo -e "${WHITE}$1${NC}"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 CURSOR_EXTENSIONS_DIR="${HOME}/cursor-extensions"
 REVIEW_GATE_DIR="${CURSOR_EXTENSIONS_DIR}/review-gate-v3"
-LEGACY_REVIEW_GATE_DIR="${CURSOR_EXTENSIONS_DIR}/review-gate-v2"
 CURSOR_MCP_FILE="${HOME}/.cursor/mcp.json"
 CURSOR_RULES_DIR=""
 VSIX_PATH=""
@@ -103,10 +102,6 @@ fi
 log_success "Python found: $(python3 --version)"
 mkdir -p "${REVIEW_GATE_DIR}"
 
-if [[ -d "${LEGACY_REVIEW_GATE_DIR}" && "${LEGACY_REVIEW_GATE_DIR}" != "${REVIEW_GATE_DIR}" ]]; then
-  log_info "Legacy install directory detected at ${LEGACY_REVIEW_GATE_DIR}. The new install will use ${REVIEW_GATE_DIR}."
-fi
-
 log_progress "Copying Review Gate files..."
 rm -rf "${REVIEW_GATE_DIR}/review_gate_mcp"
 cp -R "${SCRIPT_DIR}/review_gate_mcp" "${REVIEW_GATE_DIR}/"
@@ -184,9 +179,9 @@ else
   log_info "Cursor CLI not found. Install the VSIX manually from ${REVIEW_GATE_DIR}/$(basename "${VSIX_PATH}")"
 fi
 
-if [[ -f "${SCRIPT_DIR}/ReviewGateV2.mdc" && -n "${CURSOR_RULES_DIR}" ]]; then
+if [[ -f "${SCRIPT_DIR}/ReviewGateV3.mdc" && -n "${CURSOR_RULES_DIR}" ]]; then
   mkdir -p "${CURSOR_RULES_DIR}"
-  cp "${SCRIPT_DIR}/ReviewGateV2.mdc" "${CURSOR_RULES_DIR}/ReviewGate.mdc"
+  cp "${SCRIPT_DIR}/ReviewGateV3.mdc" "${CURSOR_RULES_DIR}/ReviewGate.mdc"
   log_success "Installed Cursor rule to ${CURSOR_RULES_DIR}/ReviewGate.mdc"
 fi
 

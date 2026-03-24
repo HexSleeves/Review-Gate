@@ -16,7 +16,7 @@ Before ending any response, I MUST:
 
 If I provide any response without calling review_gate_chat, treat it as an incomplete response that violates the protocol.
 
-# AI Agent Protocol: Review Gate V3 - MCP Integration (Version 2)
+# AI Agent Protocol: Review Gate V3 - MCP Integration (Version 3)
 
 ## 0. User Advisory & Safety
 
