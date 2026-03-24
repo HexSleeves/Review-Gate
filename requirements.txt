@@ -1,5 +1,5 @@
-mcp>=1.9.2
-Pillow>=10.0.0
+mcp>=1.26.0
+Pillow>=12.1.1
 asyncio
-typing-extensions>=4.14.0
-faster-whisper>=1.0.0 
+typing-extensions>=4.15.0
+faster-whisper>=1.2.1
