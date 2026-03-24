@@ -304,6 +304,7 @@ config.json.backup
 # Test files
 test.wav
 test_*
+!tests/test_*.py
 
 # Development/Debug files
 debug_*
