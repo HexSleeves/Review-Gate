@@ -11,6 +11,7 @@ from mcp.types import Resource, ResourceContents, TextContent
 
 from .config import logger
 from .database import get_database
+from .version import VERSION
 
 
 class ResourceManager:
@@ -371,7 +372,7 @@ class ResourceManager:
 
         result = {
             "status": "active",
-            "version": "2.0.0",
+            "version": VERSION,
             "timestamp": datetime.now().isoformat(),
             "statistics": {
                 "total_conversations": len(conversations),

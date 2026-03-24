@@ -1,22 +1,17 @@
 #!/bin/bash
 
 # Review Gate V3 - One-Click Installation Script
-# Author: Lakshman Turlapati
-# This script installs Review Gate V3 globally for Cursor IDE
 
-set -e  # Exit on any error
+set -euo pipefail
 
-# Enhanced colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 WHITE='\033[1;37m'
 CYAN='\033[0;36m'
-GRAY='\033[0;37m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Logging functions
 log_error() { echo -e "${RED}ERROR: $1${NC}"; }
 log_success() { echo -e "${GREEN}SUCCESS: $1${NC}"; }
 log_info() { echo -e "${YELLOW}INFO: $1${NC}"; }
@@ -24,386 +19,189 @@ log_progress() { echo -e "${CYAN}PROGRESS: $1${NC}"; }
 log_warning() { echo -e "${YELLOW}WARNING: $1${NC}"; }
 log_step() { echo -e "${WHITE}$1${NC}"; }
 
-# Get script directory
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+CURSOR_EXTENSIONS_DIR="${HOME}/cursor-extensions"
+REVIEW_GATE_DIR="${CURSOR_EXTENSIONS_DIR}/review-gate-v3"
+LEGACY_REVIEW_GATE_DIR="${CURSOR_EXTENSIONS_DIR}/review-gate-v2"
+CURSOR_MCP_FILE="${HOME}/.cursor/mcp.json"
+CURSOR_RULES_DIR=""
+VSIX_PATH=""
+
+run_install_helper() {
+  PYTHONPATH="${SCRIPT_DIR}" python3 -m review_gate_mcp.install_utils "$@"
+}
+
+find_vsix() {
+  if VSIX_PATH="$(run_install_helper discover-vsix --extension-dir "${SCRIPT_DIR}/cursor-extension")"; then
+    return 0
+  fi
+  return 1
+}
 
 echo -e "${BLUE}Review Gate V3 - One-Click Installation${NC}"
 echo -e "${BLUE}=========================================${NC}"
 echo ""
 
-# Detect operating system
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
-    OS="linux"
-    PACKAGE_MANAGER="apt-get"
-    INSTALL_CMD="sudo $PACKAGE_MANAGER install -y"
+  OS="linux"
+  PACKAGE_MANAGER="apt-get"
+  INSTALL_CMD="sudo ${PACKAGE_MANAGER} install -y"
+  CURSOR_RULES_DIR="${HOME}/.config/Cursor/User/rules"
 elif [[ "$OSTYPE" == "darwin"* ]]; then
-    OS="macos"
-    PACKAGE_MANAGER="brew"
-    INSTALL_CMD="$PACKAGE_MANAGER install"
+  OS="macos"
+  PACKAGE_MANAGER="brew"
+  INSTALL_CMD="${PACKAGE_MANAGER} install"
+  CURSOR_RULES_DIR="${HOME}/Library/Application Support/Cursor/User/rules"
 else
-    log_error "Unsupported operating system: $OSTYPE"
-    log_info "This script is designed for Linux and macOS"
-    exit 1
+  log_error "Unsupported operating system: ${OSTYPE}"
+  log_info "Use manual installation on this platform."
+  exit 1
 fi
 
-log_success "Detected OS: $OS"
+log_success "Detected OS: ${OS}"
 
-# Only install Homebrew on macOS
-if [[ "$OS" == "macos" ]]; then
-    if ! command -v brew &> /dev/null; then
-        log_progress "Installing Homebrew (macOS package manager)..."
-        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    else
-        log_success "Homebrew already installed"
-    fi
+if ! find_vsix; then
+  log_error "No packaged Review Gate V3 VSIX was found in ${SCRIPT_DIR}/cursor-extension."
+  log_info "Build the extension first from ${SCRIPT_DIR}/cursor-extension, then rerun install.sh."
+  exit 1
 fi
 
-# Install SoX for speech-to-text
-log_progress "Installing System Dependencies (SoX, FFmpeg, pkg-config)..."
-if [[ "$OS" == "linux" ]]; then
-    sudo apt-get update
-    # Install SoX, pkg-config and FFmpeg libraries required for building PyAV
-    $INSTALL_CMD sox pkg-config ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev
+log_success "Using extension package: ${VSIX_PATH}"
+
+if [[ "${OS}" == "macos" ]] && ! command -v brew &> /dev/null; then
+  log_progress "Installing Homebrew..."
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+log_progress "Installing system dependencies..."
+if [[ "${OS}" == "linux" ]]; then
+  sudo apt-get update
+  ${INSTALL_CMD} sox pkg-config ffmpeg libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev
 else
-    # macOS
-    $INSTALL_CMD sox pkg-config ffmpeg
+  ${INSTALL_CMD} sox pkg-config ffmpeg
 fi
 
-# Validate SoX installation and microphone access
-log_progress "Validating SoX and microphone setup..."
 if command -v sox &> /dev/null; then
-    SOX_VERSION=$(sox --version 2>&1 | head -n1)
-    log_success "SoX found: $SOX_VERSION"
-
-    # Test microphone access (quick test)
-    log_progress "Testing microphone access..."
-    if timeout 3s sox -d -r 16000 -c 1 /tmp/sox_test_$$.wav trim 0 0.1 2>/dev/null; then
-        rm -f /tmp/sox_test_$$.wav
-        log_success "Microphone access test successful"
-    else
-        rm -f /tmp/sox_test_$$.wav
-        log_warning "Microphone test failed - speech features may not work"
-        log_info "Common fixes:"
-        log_step "   - Grant microphone permissions to Terminal/iTerm"
-        log_step "   - Check System Preferences > Security & Privacy > Microphone"
-        log_step "   - Make sure no other apps are using the microphone"
-    fi
+  log_success "SoX found: $(sox --version 2>&1 | head -n1)"
+  log_progress "Testing microphone access..."
+  if sox -d -r 16000 -c 1 /tmp/sox_test_$$.wav trim 0 0.1 >/dev/null 2>&1; then
+    rm -f /tmp/sox_test_$$.wav
+    log_success "Microphone access test successful"
+  else
+    rm -f /tmp/sox_test_$$.wav
+    log_warning "Microphone test failed. Speech features may be unavailable until system permissions are fixed."
+  fi
 else
-    log_error "SoX installation failed"
-    log_info "Speech-to-text features will be disabled"
-    if [[ "$OS" == "macos" ]]; then
-        log_info "Try: brew install sox"
-    else
-        log_info "Try: sudo apt-get install sox"
-    fi
+  log_warning "SoX is not installed correctly. Speech features will remain unavailable."
 fi
 
-# Check if Python 3 is available
 if ! command -v python3 &> /dev/null; then
-    log_error "Python 3 is required but not installed"
-    log_info "Please install Python 3 and run this script again"
-    exit 1
-else
-    log_success "Python 3 found: $(python3 --version)"
+  log_error "Python 3 is required but was not found."
+  exit 1
 fi
 
-# Create global Cursor extensions directory
-CURSOR_EXTENSIONS_DIR="$HOME/cursor-extensions"
-REVIEW_GATE_DIR="$CURSOR_EXTENSIONS_DIR/review-gate-v2"
+log_success "Python found: $(python3 --version)"
+mkdir -p "${REVIEW_GATE_DIR}"
 
-log_progress "Creating global installation directory..."
-mkdir -p "$REVIEW_GATE_DIR"
-
-# Copy MCP server files
-log_progress "Copying MCP server files..."
-# Copy the package structure
-cp -r "$SCRIPT_DIR/review_gate_mcp" "$REVIEW_GATE_DIR/"
-cp "$SCRIPT_DIR/pyproject.toml" "$REVIEW_GATE_DIR/"
-# Copy legacy files just in case, but prefer package
-if [[ -f "$SCRIPT_DIR/requirements_simple.txt" ]]; then
-    cp "$SCRIPT_DIR/requirements_simple.txt" "$REVIEW_GATE_DIR/"
+if [[ -d "${LEGACY_REVIEW_GATE_DIR}" && "${LEGACY_REVIEW_GATE_DIR}" != "${REVIEW_GATE_DIR}" ]]; then
+  log_info "Legacy install directory detected at ${LEGACY_REVIEW_GATE_DIR}. The new install will use ${REVIEW_GATE_DIR}."
 fi
 
-# Create Python virtual environment
+log_progress "Copying Review Gate files..."
+rm -rf "${REVIEW_GATE_DIR}/review_gate_mcp"
+cp -R "${SCRIPT_DIR}/review_gate_mcp" "${REVIEW_GATE_DIR}/"
+cp "${SCRIPT_DIR}/pyproject.toml" "${REVIEW_GATE_DIR}/"
+cp "${SCRIPT_DIR}/requirements.txt" "${REVIEW_GATE_DIR}/"
+cp "${SCRIPT_DIR}/readme.md" "${REVIEW_GATE_DIR}/"
+cp "${VSIX_PATH}" "${REVIEW_GATE_DIR}/"
+
+cd "${REVIEW_GATE_DIR}"
+
+if [[ "${OS}" == "linux" ]] && ! dpkg -s python3-venv >/dev/null 2>&1; then
+  log_progress "Installing python3-venv..."
+  sudo apt-get update
+  sudo apt-get install -y python3-venv
+fi
+
 log_progress "Creating Python virtual environment..."
-cd "$REVIEW_GATE_DIR"
-
-# Install python3-venv on Linux if needed
-if [[ "$OS" == "linux" ]]; then
-    if ! dpkg -s python3-venv >/dev/null 2>&1; then
-        log_progress "Installing Python virtual environment support..."
-        sudo apt-get update
-        sudo apt-get install -y python3-venv
-    fi
-fi
-
 python3 -m venv venv
-
-# Activate virtual environment and install dependencies
-log_progress "Installing Python dependencies..."
 source venv/bin/activate
 pip install --upgrade pip
 
-# Install the package in editable mode (or standard install)
-log_progress "Installing Review Gate MCP package (core)..."
+log_progress "Installing Review Gate MCP package..."
 pip install .
 
-# Attempt to install speech dependencies
-log_progress "Installing speech dependencies..."
+log_progress "Installing optional speech dependencies..."
 if pip install ".[speech]"; then
-    log_success "Speech dependencies installed successfully"
+  log_success "Speech dependencies installed successfully"
 else
-    log_warning "Standard speech dependency installation failed"
-    log_info "Attempting fallback installation for faster-whisper..."
-
-    # Try manual install ignoring dependencies that might conflict
-    # This is a 'best effort' to get it working on systems with onnxruntime issues
-    if pip install faster-whisper>=1.0.0 --no-deps; then
-         log_success "faster-whisper installed manually (deps skipped)"
-         # Try to verify imports
-         if python3 -c "import faster_whisper" 2>/dev/null; then
-             log_success "faster-whisper verified working"
-         else
-             log_warning "faster-whisper installed but import failed - check dependencies"
-         fi
-    else
-         log_error "Could not install faster-whisper. Speech features will be disabled."
-    fi
+  log_warning "Speech dependency install failed. Review Gate will still work without speech-to-text."
 fi
 
 deactivate
 
-log_success "Python environment created and dependencies installed"
+log_progress "Configuring Cursor MCP servers..."
+mkdir -p "${HOME}/.cursor"
 
-# Create MCP configuration
-CURSOR_MCP_FILE="$HOME/.cursor/mcp.json"
-log_progress "Configuring MCP servers..."
-mkdir -p "$HOME/.cursor"
-
-# Backup existing MCP configuration if it exists
-if [[ -f "$CURSOR_MCP_FILE" ]]; then
-    BACKUP_FILE="$CURSOR_MCP_FILE.backup.$(date +%Y%m%d_%H%M%S)"
-    log_info "Backing up existing MCP configuration to: $BACKUP_FILE"
-    cp "$CURSOR_MCP_FILE" "$BACKUP_FILE"
-
-    # Check if the existing config is valid JSON (simplified)
-    if ! python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1; then
-        log_warning "Existing MCP config has invalid JSON format"
-        log_info "Creating new configuration file"
-        HAS_EXISTING_SERVERS=false
-    else
-        log_success "Found existing MCP configuration, will merge servers"
-        HAS_EXISTING_SERVERS=true
-    fi
-else
-    log_info "Creating new MCP configuration file"
-    HAS_EXISTING_SERVERS=false
-fi
-
-# Create simplified MCP configuration
-log_progress "Configuring MCP servers..."
-
-# Create the new configuration using a simple Python script
-python3 -c "
-import json
-import os
-
-config_file = '$CURSOR_MCP_FILE'
-review_gate_dir = '$REVIEW_GATE_DIR'
-has_existing = $([[ "$HAS_EXISTING_SERVERS" == "true" ]] && echo "True" || echo "False")
-
-# Read existing config if available
-existing_servers = {}
-if has_existing and os.path.exists(config_file):
-    try:
-        with open(config_file, 'r') as f:
-            existing_config = json.load(f)
-            existing_servers = existing_config.get('mcpServers', {})
-            # Remove review-gate-v2 if it exists (we'll add the new one)
-            existing_servers.pop('review-gate-v2', None)
-    except:
-        existing_servers = {}
-
-# Add Review Gate V3 configuration
-existing_servers['review-gate-v2'] = {
-    'command': os.path.join(review_gate_dir, 'venv/bin/python'),
-    'args': ['-m', 'review_gate_mcp.main'],
-    'env': {
-        'PYTHONPATH': review_gate_dir,
-        'PYTHONUNBUFFERED': '1',
-        'REVIEW_GATE_MODE': 'cursor_integration'
-    }
-}
-
-# Write the configuration
-config = {'mcpServers': existing_servers}
-os.makedirs(os.path.dirname(config_file), exist_ok=True)
-with open(config_file, 'w') as f:
-    json.dump(config, f, indent=2)
-"
-
-if [[ $? -eq 0 ]]; then
-    log_success "MCP configuration updated successfully"
-else
-    log_error "Failed to update MCP configuration"
+if [[ -f "${CURSOR_MCP_FILE}" ]]; then
+  BACKUP_FILE="${CURSOR_MCP_FILE}.backup.$(date +%Y%m%d_%H%M%S)"
+  cp "${CURSOR_MCP_FILE}" "${BACKUP_FILE}"
+  log_info "Backed up MCP config to ${BACKUP_FILE}"
+  if ! python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${CURSOR_MCP_FILE}" >/dev/null 2>&1; then
+    log_error "Existing MCP config is invalid JSON. Fix ${CURSOR_MCP_FILE} and rerun the installer."
     exit 1
+  fi
 fi
 
-# Validate the generated configuration
-if python3 -c "import json; json.load(open('$CURSOR_MCP_FILE'))" >/dev/null 2>&1; then
-    log_success "MCP configuration file created at: $CURSOR_MCP_FILE"
+run_install_helper merge-config --config "${CURSOR_MCP_FILE}" --install-dir "${REVIEW_GATE_DIR}"
+python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${CURSOR_MCP_FILE}" >/dev/null
+log_success "MCP configuration updated at ${CURSOR_MCP_FILE}"
 
-    # Count configured servers (simplified)
-    SERVER_COUNT=$(python3 -c "import json; print(len(json.load(open('$CURSOR_MCP_FILE')).get('mcpServers', {})))")
-    log_step "Total MCP servers configured: $SERVER_COUNT"
-    log_step "  - review-gate-v2 (Review Gate V3)"
-else
-    log_error "Generated MCP configuration is invalid"
-    if [[ -f "$BACKUP_FILE" ]]; then
-        log_progress "Restoring from backup..."
-        cp "$BACKUP_FILE" "$CURSOR_MCP_FILE"
-        log_success "Backup restored"
-    else
-        log_error "No backup available, installation failed"
-        exit 1
-    fi
-fi
-
-# Test MCP server
-log_progress "Testing MCP server..."
-cd "$REVIEW_GATE_DIR"
+log_progress "Testing MCP server startup..."
 source venv/bin/activate
-TEMP_DIR=$(python3 -c 'import tempfile; print(tempfile.gettempdir())')
-timeout 5s python -m review_gate_mcp.main > "$TEMP_DIR/mcp_test.log" 2>&1 || true
+python -m review_gate_mcp.main > /tmp/review_gate_install_test.log 2>&1 &
+SERVER_PID=$!
+sleep 5
+kill "${SERVER_PID}" >/dev/null 2>&1 || true
+wait "${SERVER_PID}" >/dev/null 2>&1 || true
 deactivate
 
-if grep -q "Review Gate 2.0 server initialized" "$TEMP_DIR/mcp_test.log"; then
-    log_success "MCP server test successful"
+if grep -q "Review Gate V3" /tmp/review_gate_install_test.log; then
+  log_success "MCP server startup test completed"
 else
-    log_warning "MCP server test inconclusive (may be normal)"
+  log_warning "MCP server startup test was inconclusive. Check /tmp/review_gate_install_test.log if needed."
 fi
-rm -f "$TEMP_DIR/mcp_test.log"
+rm -f /tmp/review_gate_install_test.log
 
-# Install Cursor extension
-EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix"
-# Check if new version exists
-if [[ -f "$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix" ]]; then
-    EXTENSION_FILE="$SCRIPT_DIR/cursor-extension/review-gate-v2-3.0.0.vsix"
-fi
-
-if [[ -f "$EXTENSION_FILE" ]]; then
-    log_progress "Installing Cursor extension..."
-
-    # Copy extension to installation directory
-    cp "$EXTENSION_FILE" "$REVIEW_GATE_DIR/"
-
-    # Try automated installation first
-    EXTENSION_INSTALLED=false
-    if command -v cursor &> /dev/null; then
-        log_progress "Attempting automated extension installation..."
-        if cursor --install-extension "$EXTENSION_FILE" >/dev/null 2>&1; then
-            log_success "Extension installed automatically via command line"
-            EXTENSION_INSTALLED=true
-        else
-            log_warning "Automated installation failed, falling back to manual method"
-        fi
-    fi
-
-    # If automated installation failed, provide manual instructions
-    if [[ "$EXTENSION_INSTALLED" == false ]]; then
-        echo -e "${BLUE}MANUAL EXTENSION INSTALLATION REQUIRED:${NC}"
-        log_info "Please complete the extension installation manually:"
-        log_step "1. Open Cursor IDE"
-        log_step "2. Press Cmd+Shift+P (or Ctrl+Shift+P on Linux)"
-        log_step "3. Type 'Extensions: Install from VSIX'"
-        log_step "4. Select: $REVIEW_GATE_DIR/$(basename "$EXTENSION_FILE")"
-        log_step "5. Restart Cursor when prompted"
-        echo ""
-
-        # Try to open Cursor if available
-        if command -v cursor &> /dev/null; then
-            log_progress "Opening Cursor IDE..."
-            cursor . &
-        elif [[ -d "/Applications/Cursor.app" ]]; then
-            log_progress "Opening Cursor IDE..."
-            open -a "Cursor" . &
-        else
-            log_info "Please open Cursor IDE manually"
-        fi
-    fi
+log_progress "Installing Cursor extension..."
+if command -v cursor &> /dev/null; then
+  if cursor --install-extension "${VSIX_PATH}" >/dev/null 2>&1; then
+    log_success "Extension installed via Cursor CLI"
+  else
+    log_warning "Cursor CLI install failed. Manual extension install may still be required."
+  fi
 else
-    # Check if we are in dev mode and source is available
-    if [[ -d "$SCRIPT_DIR/cursor-extension/src" ]]; then
-        log_info "Extension VSIX not found, but source is available."
-        log_info "You may need to build the extension using 'vsce package'."
-    else
-        log_error "Extension file not found: $EXTENSION_FILE"
-        log_info "Please ensure the extension is built in cursor-extension/ directory"
-    fi
+  log_info "Cursor CLI not found. Install the VSIX manually from ${REVIEW_GATE_DIR}/$(basename "${VSIX_PATH}")"
 fi
 
-# Install global rule (optional) - Cross-platform directory detection
-if [[ "$OS" == "macos" ]]; then
-    CURSOR_RULES_DIR="$HOME/Library/Application Support/Cursor/User/rules"
-elif [[ "$OS" == "linux" ]]; then
-    CURSOR_RULES_DIR="$HOME/.config/Cursor/User/rules"
+if [[ -f "${SCRIPT_DIR}/ReviewGateV2.mdc" && -n "${CURSOR_RULES_DIR}" ]]; then
+  mkdir -p "${CURSOR_RULES_DIR}"
+  cp "${SCRIPT_DIR}/ReviewGateV2.mdc" "${CURSOR_RULES_DIR}/ReviewGate.mdc"
+  log_success "Installed Cursor rule to ${CURSOR_RULES_DIR}/ReviewGate.mdc"
 fi
 
-if [[ -f "$SCRIPT_DIR/ReviewGateV2.mdc" ]] && [[ -n "$CURSOR_RULES_DIR" ]]; then
-    log_progress "Installing global rule..."
-    mkdir -p "$CURSOR_RULES_DIR"
-    cp "$SCRIPT_DIR/ReviewGateV2.mdc" "$CURSOR_RULES_DIR/ReviewGate.mdc"
-    log_success "Global rule installed to: $CURSOR_RULES_DIR/ReviewGate.mdc"
-elif [[ -f "$SCRIPT_DIR/ReviewGateV2.mdc" ]]; then
-    log_warning "Could not determine Cursor rules directory for this platform"
-    log_info "Global rule available at: $SCRIPT_DIR/ReviewGateV2.mdc"
-fi
-
-# Clean up any existing temp files
-log_progress "Cleaning up temporary files..."
+log_progress "Cleaning temporary files..."
+rm -f /tmp/review_gate_* /tmp/mcp_response* 2>/dev/null || true
 TEMP_DIR=$(python3 -c 'import tempfile; print(tempfile.gettempdir())')
-rm -f "$TEMP_DIR"/review_gate_* "$TEMP_DIR"/mcp_response* 2>/dev/null || true
+rm -f "${TEMP_DIR}"/review_gate_* "${TEMP_DIR}"/mcp_response* 2>/dev/null || true
 
 echo ""
-log_success "Review Gate V3 Installation Complete!"
-echo -e "${GREEN}=======================================${NC}"
+log_success "Review Gate V3 installation complete"
+log_step "MCP server directory: ${REVIEW_GATE_DIR}"
+log_step "MCP config: ${CURSOR_MCP_FILE}"
+log_step "VSIX package: ${REVIEW_GATE_DIR}/$(basename "${VSIX_PATH}")"
 echo ""
-echo -e "${BLUE}Installation Summary:${NC}"
-log_step "   - MCP Server: $REVIEW_GATE_DIR"
-log_step "   - MCP Config: $CURSOR_MCP_FILE"
-log_step "   - Extension: $REVIEW_GATE_DIR/$(basename "$EXTENSION_FILE" 2>/dev/null || echo "review-gate-v2-*.vsix")"
-echo ""
-echo -e "${BLUE}Testing Your Installation:${NC}"
-log_step "1. Restart Cursor completely"
-log_step "2. Press Cmd+Shift+R to test manual trigger"
-log_step "3. Or ask Cursor Agent: 'Use the review_gate_chat tool'"
-echo ""
-echo -e "${BLUE}Speech-to-Text Features:${NC}"
-log_step "   - Click microphone icon in popup"
-log_step "   - Speak clearly for 2-3 seconds"
-log_step "   - Click stop to transcribe"
-echo ""
-echo -e "${BLUE}Image Upload Features:${NC}"
-log_step "   - Click camera icon in popup"
-log_step "   - Select images (PNG, JPG, etc.)"
-log_step "   - Images are included in response"
-echo ""
-echo -e "${BLUE}Troubleshooting:${NC}"
-log_step "   - Logs: tail -f $(python3 -c 'import tempfile; print(tempfile.gettempdir())')/review_gate_v2.log"
-log_step "   - Test SoX: sox --version"
-log_step "   - Browser Console: F12 in Cursor"
-echo ""
-log_success "Enjoy your voice-activated Review Gate!"
-
-# Final verification
-log_progress "Final verification..."
-if [[ -f "$REVIEW_GATE_DIR/pyproject.toml" ]] && \
-   [[ -f "$CURSOR_MCP_FILE" ]] && \
-   [[ -d "$REVIEW_GATE_DIR/venv" ]]; then
-    log_success "All components installed successfully"
-    exit 0
-else
-    log_error "Some components may not have installed correctly"
-    log_info "Please check the installation manually"
-    exit 1
-fi
+log_step "Next steps:"
+log_step "1. Restart Cursor"
+log_step "2. Run 'reviewGate.openChat' or press Cmd/Ctrl+Shift+R"
+log_step "3. Ask Cursor Agent to call the 'review_gate_chat' MCP tool"

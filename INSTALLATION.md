@@ -1,180 +1,67 @@
-# Review Gate V3 - Installation Guide
+# Review Gate V3 Installation
 
-## Overview
+## Automated Install
 
-Review Gate V3 is an MCP (Model Context Protocol) server that enables Cursor to display interactive popup dialogs. This guide provides both automated and manual installation methods.
-
-## Prerequisites
-
-### System Requirements
-
-- macOS, Linux, or Windows 10/11
-- Cursor IDE (latest version)
-- Python 3.8 or higher
-- pip (Python package manager)
-
-### Platform-Specific Requirements
-
-**macOS/Linux:**
-
-- Homebrew (macOS) or package manager (Linux)
-- SoX audio system for speech-to-text
-
-**Windows:**
-
-- PowerShell or Command Prompt with administrator access
-- Chocolatey (optional, for SoX installation)
-
-## Quick Installation (Automated)
-
-### macOS/Linux
+### macOS / Linux
 
 ```bash
-# Clone the repository
 git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
-
-# Make installer executable
-chmod +x install.sh
-
-# Run installer
+cd Review-Gate
 ./install.sh
 ```
 
-### Windows PowerShell
+The installer targets `~/cursor-extensions/review-gate-v3`, merges the MCP config safely, and installs the packaged `review-gate-v3-*.vsix` if the `cursor` CLI is available.
 
-```powershell
-# Clone the repository
-git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate/V2
+## Manual Install
 
-# Enable script execution
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-
-# Run installer
-.\install.ps1
-```
-
-### Windows Command Prompt
-
-```cmd
-# Clone the repository
-git clone https://github.com/LakshmanTurlapati/Review-Gate.git
-cd Review-Gate\V2
-
-# Run installer
-install.bat
-```
-
-## Manual Installation
-
-If the automated installation fails, follow these step-by-step instructions:
-
-### Step 1: Create Installation Directory
-
-**macOS/Linux:**
+### 1. Copy the runtime files
 
 ```bash
-mkdir -p ~/cursor-extensions/review-gate-v2
-cd ~/cursor-extensions/review-gate-v2
+mkdir -p ~/cursor-extensions/review-gate-v3
+cp -R review_gate_mcp ~/cursor-extensions/review-gate-v3/
+cp pyproject.toml requirements.txt readme.md ~/cursor-extensions/review-gate-v3/
+cp cursor-extension/review-gate-v3-*.vsix ~/cursor-extensions/review-gate-v3/
 ```
 
-**Windows:**
-
-```cmd
-mkdir %USERPROFILE%\cursor-extensions\review-gate-v2
-cd %USERPROFILE%\cursor-extensions\review-gate-v2
-```
-
-### Step 2: Copy Required Files
-
-Copy these files from the downloaded Review-Gate/V2 folder to your installation directory:
-
-- `review_gate_v2_mcp.py` - The MCP server
-- `requirements_simple.txt` - Python dependencies
-- `cursor-extension/review-gate-v2-2.6.4.vsix` - Cursor extension
-
-### Step 3: Set Up Python Environment
-
-**macOS/Linux:**
+### 2. Create the Python environment
 
 ```bash
-# Create virtual environment
+cd ~/cursor-extensions/review-gate-v3
 python3 -m venv venv
-
-# Activate virtual environment
 source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements_simple.txt
+pip install --upgrade pip
+pip install .
+pip install ".[speech]"  # optional
+deactivate
 ```
 
-**Windows:**
+### 3. Install system speech prerequisites
 
-```cmd
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements_simple.txt
-```
-
-### Step 4: Install SoX (for Speech-to-Text)
-
-**macOS:**
+macOS:
 
 ```bash
-brew install sox
+brew install sox ffmpeg pkg-config
 ```
 
-**Linux (Ubuntu/Debian):**
+Ubuntu / Debian:
 
 ```bash
-sudo apt-get install sox
+sudo apt-get update
+sudo apt-get install -y sox ffmpeg pkg-config libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libavdevice-dev
 ```
 
-**Windows:**
+### 4. Add the MCP server to Cursor
 
-```cmd
-# Option 1: Using Chocolatey
-choco install sox
-
-# Option 2: Manual download from http://sox.sourceforge.net/
-```
-
-### Step 5: Configure MCP Server
-
-Create or edit the MCP configuration file:
-
-**macOS/Linux:**
-
-```bash
-mkdir -p ~/.cursor
-nano ~/.cursor/mcp.json
-```
-
-**Windows:**
-
-```cmd
-mkdir %USERPROFILE%\.cursor
-notepad %USERPROFILE%\.cursor\mcp.json
-```
-
-Add this configuration (replace paths with your actual paths):
-
-**macOS/Linux Configuration:**
+Create or update `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "review-gate-v2": {
-      "command": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v2/venv/bin/python",
-      "args": ["/Users/YOUR_USERNAME/cursor-extensions/review-gate-v2/review_gate_v2_mcp.py"],
+    "review-gate-v3": {
+      "command": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3/venv/bin/python",
+      "args": ["-m", "review_gate_mcp.main"],
       "env": {
-        "PYTHONPATH": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v2",
+        "PYTHONPATH": "/Users/YOUR_USERNAME/cursor-extensions/review-gate-v3",
         "PYTHONUNBUFFERED": "1",
         "REVIEW_GATE_MODE": "cursor_integration"
       }
@@ -183,290 +70,46 @@ Add this configuration (replace paths with your actual paths):
 }
 ```
 
-**Windows Configuration:**
+If you already have other MCP servers configured, keep them and add the `review-gate-v3` entry alongside them.
 
-```json
-{
-  "mcpServers": {
-    "review-gate-v2": {
-      "command": "C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v2\\venv\\Scripts\\python.exe",
-      "args": ["C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v2\\review_gate_v2_mcp.py"],
-      "env": {
-        "PYTHONPATH": "C:\\Users\\YOUR_USERNAME\\cursor-extensions\\review-gate-v2",
-        "PYTHONUNBUFFERED": "1",
-        "REVIEW_GATE_MODE": "cursor_integration"
-      }
-    }
-  }
-}
-```
+### 5. Install the extension
 
-### Step 6: Install Cursor Extension
-
-1. Open Cursor IDE
-2. Press `Ctrl+Shift+P` (Windows/Linux) or `Cmd+Shift+P` (macOS)
-3. Type "Extensions: Install from VSIX"
-4. Navigate to your installation directory
-5. Select `review-gate-v2-2.6.4.vsix`
-6. Restart Cursor when prompted
-
-### Step 7: Verify Installation
-
-Test the MCP server:
-
-**macOS/Linux:**
+If the `cursor` CLI is available:
 
 ```bash
-cd ~/cursor-extensions/review-gate-v2
-source venv/bin/activate
-python review_gate_v2_mcp.py
-# Should see initialization messages, press Ctrl+C to stop
+cursor --install-extension ~/cursor-extensions/review-gate-v3/review-gate-v3-*.vsix
 ```
 
-**Windows:**
-
-```cmd
-cd %USERPROFILE%\cursor-extensions\review-gate-v2
-venv\Scripts\activate
-python review_gate_v2_mcp.py
-# Should see initialization messages, press Ctrl+C to stop
-```
-
-## Testing Your Installation
-
-### Test 1: Extension Check
+Otherwise, install the VSIX manually from Cursor:
 
 1. Open Cursor
-2. Go to Extensions panel (Ctrl+Shift+X or Cmd+Shift+X)
-3. Look for "Review Gate V3" in installed extensions
-4. Ensure it's enabled
+2. Open the command palette
+3. Run `Extensions: Install from VSIX...`
+4. Pick the packaged `review-gate-v3-*.vsix` file in `~/cursor-extensions/review-gate-v3/`
 
-### Test 2: Manual Popup
+### 6. Install the rule file
 
-1. Press `Ctrl+Shift+R` (Windows/Linux) or `Cmd+Shift+R` (macOS)
-2. Review Gate popup should appear
-3. Try typing text and clicking send
+Copy `ReviewGateV2.mdc` into your Cursor rules directory as `ReviewGate.mdc`.
 
-### Test 3: MCP Integration
-
-1. Start a new chat in Cursor
-2. Type: "Use the review_gate_chat tool to get my feedback"
-3. The popup should appear automatically
-
-### Test 4: Check MCP Status
-
-Look for the status indicator in the popup:
-
-- Green dot: MCP server is active
-- Orange dot: MCP server is inactive
-
-## Troubleshooting
-
-### MCP Server Not Starting
-
-Check Python installation:
+macOS:
 
 ```bash
-python --version  # or python3 --version
+mkdir -p "$HOME/Library/Application Support/Cursor/User/rules"
+cp ReviewGateV2.mdc "$HOME/Library/Application Support/Cursor/User/rules/ReviewGate.mdc"
 ```
 
-Verify virtual environment:
+Linux:
 
 ```bash
-# macOS/Linux
-which python
-
-# Windows
-where python
+mkdir -p "$HOME/.config/Cursor/User/rules"
+cp ReviewGateV2.mdc "$HOME/.config/Cursor/User/rules/ReviewGate.mdc"
 ```
 
-Check log file:
+## Verification
 
-```bash
-# macOS/Linux
-tail -f /tmp/review_gate_v2.log
+1. Restart Cursor.
+2. Run `reviewGate.openChat` or press `Cmd/Ctrl+Shift+R`.
+3. Ask Cursor Agent to call `review_gate_chat`.
+4. Confirm the popup returns a response to the MCP server.
 
-# Windows
-type %TEMP%\review_gate_v2.log
-```
-
-### Extension Not Working
-
-1. Check if extension is enabled:
-   - Open Extensions panel
-   - Find Review Gate V3
-   - Click "Enable" if disabled
-
-2. Check browser console for errors:
-   - Press F12 in Cursor
-   - Go to Console tab
-   - Look for error messages
-
-3. Restart Cursor completely:
-   - Close all Cursor windows
-   - Wait 5 seconds
-   - Reopen Cursor
-
-### Popup Not Appearing
-
-Verify MCP configuration:
-
-```bash
-# macOS/Linux
-cat ~/.cursor/mcp.json
-
-# Windows
-type %USERPROFILE%\.cursor\mcp.json
-```
-
-Check for trigger files:
-
-```bash
-# macOS/Linux
-ls -la /tmp/review_gate_*
-
-# Windows
-dir %TEMP%\review_gate_*
-```
-
-### Speech-to-Text Issues
-
-Test microphone:
-
-```bash
-# macOS/Linux
-sox -d -r 16000 -c 1 test.wav trim 0 2
-
-# Windows (if SoX installed)
-sox -d -r 16000 -c 1 test.wav trim 0 2
-```
-
-Check microphone permissions:
-
-- macOS: System Preferences > Security & Privacy > Privacy > Microphone
-- Windows: Settings > Privacy > Microphone
-- Linux: Check your distribution's audio settings
-
-### Windows-Specific Issues
-
-1. Path format errors:
-   - Use double backslashes in JSON: `C:\\Users\\...`
-   - Or use forward slashes: `C:/Users/...`
-
-2. Python not found:
-   - Add Python to PATH during installation
-   - Or use full path to python.exe
-
-3. Permission denied:
-   - Run Command Prompt as Administrator
-   - Check Windows Defender settings
-
-## File Locations
-
-After installation, files should be in these locations:
-
-**macOS/Linux:**
-
-```
-~/cursor-extensions/review-gate-v2/
-  - review_gate_v2_mcp.py
-  - requirements_simple.txt
-  - review-gate-v2-2.6.4.vsix
-  - venv/
-
-~/.cursor/
-  - mcp.json
-
-Temp files: /tmp/review_gate_*
-Log file: /tmp/review_gate_v2.log
-```
-
-**Windows:**
-
-```
-%USERPROFILE%\cursor-extensions\review-gate-v2\
-  - review_gate_v2_mcp.py
-  - requirements_simple.txt
-  - review-gate-v2-2.6.4.vsix
-  - venv\
-
-%USERPROFILE%\.cursor\
-  - mcp.json
-
-Temp files: %TEMP%\review_gate_*
-Log file: %TEMP%\review_gate_v2.log
-```
-
-## Uninstallation
-
-### Automated Uninstall
-
-**macOS/Linux:**
-
-```bash
-cd Review-Gate/V2
-chmod +x uninstall.sh
-./uninstall.sh
-```
-
-**Windows:**
-
-```cmd
-cd Review-Gate\V2
-uninstall.bat
-```
-
-### Manual Uninstall
-
-1. Remove extension from Cursor:
-   - Open Extensions panel
-   - Find Review Gate V3
-   - Click Uninstall
-
-2. Remove installation directory:
-
-   ```bash
-   # macOS/Linux
-   rm -rf ~/cursor-extensions/review-gate-v2
-
-   # Windows
-   rmdir /s %USERPROFILE%\cursor-extensions\review-gate-v2
-   ```
-
-3. Remove MCP configuration:
-   - Edit mcp.json file
-   - Remove the "review-gate-v2" entry
-
-4. Clean temporary files:
-
-   ```bash
-   # macOS/Linux
-   rm -f /tmp/review_gate_*
-
-   # Windows
-   del %TEMP%\review_gate_*
-   ```
-
-## Getting Help
-
-If you encounter issues not covered here:
-
-1. Check the log file for error messages
-2. Verify all file paths are correct
-3. Ensure Python and dependencies are installed
-4. Try the manual installation method
-5. Report issues at: <https://github.com/LakshmanTurlapati/Review-Gate/issues>
-
-## Features
-
-Once installed, Review Gate V3 provides:
-
-- Text input capture from Cursor agents
-- Image upload functionality
-- Speech-to-text conversion (requires SoX)
-- 5-minute timeout for user responses
-- Cross-platform compatibility
-- MCP status monitoring
-- Manual trigger hotkey (Ctrl/Cmd+Shift+R)
-
-The system is now ready to enhance your Cursor workflow with interactive popups.
+For a full release checklist, use [SMOKE_TEST.md](SMOKE_TEST.md).

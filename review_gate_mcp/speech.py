@@ -14,6 +14,7 @@ except ImportError:
     WhisperModel = None
 
 from .config import logger, get_temp_path
+from .utils import write_json_atomic
 
 class SpeechHandler:
     def __init__(self, shutdown_event=None):
@@ -244,8 +245,7 @@ class SpeechHandler:
             }
             
             response_file = get_temp_path(f"review_gate_speech_response_{trigger_id}.json")
-            with open(response_file, 'w') as f:
-                json.dump(response_data, f, indent=2)
+            write_json_atomic(response_file, response_data)
             
             logger.info(f"📝 Speech response written: {response_file}")
             

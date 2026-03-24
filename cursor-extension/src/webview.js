@@ -1,10 +1,10 @@
-import fs from "node:fs";
-import path from "node:path";
-import state from "./state";
-import { logUserInput } from "./logger";
-import { startNodeRecording, stopNodeRecording } from "./audio";
-import { getMimeType } from "./utils";
-import vscode from "vscode";
+const fs = require("node:fs");
+const path = require("node:path");
+const state = require("./state");
+const { logUserInput } = require("./logger");
+const { startNodeRecording, stopNodeRecording } = require("./audio");
+const { getMimeType } = require("./utils");
+const vscode = require("vscode");
 
 function openReviewGatePopup(context, options = {}) {
   const {

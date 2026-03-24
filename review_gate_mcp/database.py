@@ -7,6 +7,7 @@ import json
 import sqlite3
 import time
 import uuid
+from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -21,6 +22,7 @@ class Database:
         self.db_path = db_path or get_temp_path("review_gate.db")
         self._lock = asyncio.Lock()
         self._initialized = False
+        self._journal_mode = "DELETE"
 
     async def initialize(self) -> None:
         """Initialize database and run migrations."""
@@ -39,9 +41,11 @@ class Database:
         # Enable WAL mode if on local filesystem
         if self._use_wal:
             await self.execute("PRAGMA journal_mode=WAL")
+            self._journal_mode = "WAL"
             logger.info("✅ Database WAL mode enabled")
         else:
             await self.execute("PRAGMA journal_mode=TRUNCATE")
+            self._journal_mode = "TRUNCATE"
             logger.info("ℹ️ Database using TRUNCATE journal mode (network filesystem)")
 
         self._initialized = True
@@ -105,19 +109,34 @@ class Database:
 
     async def _get_schema_version(self) -> int:
         """Get current schema version."""
-        try:
-            result = await self.fetch_one("SELECT MAX(version) as v FROM schema_migrations")
-            return result[0] if result and result[0] else 0
-        except sqlite3.OperationalError:
-            # Schema doesn't exist yet
-            return 0
+        async with self._lock:
+            def _fetch_version():
+                with closing(self._connect()) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT MAX(version) as v FROM schema_migrations")
+                    row = cursor.fetchone()
+                    return row[0] if row and row[0] else 0
 
-    async def execute(self, query: str, params: Tuple = ()) -> None:
-        """Execute a SQL query with parameters (for INSERT, UPDATE, DELETE)."""
+            try:
+                return await asyncio.to_thread(_fetch_version)
+            except sqlite3.OperationalError:
+                return 0
+
+    def _connect(self) -> sqlite3.Connection:
+        """Create a configured SQLite connection for the current database."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON")
+        conn.execute("PRAGMA busy_timeout=5000")
+        if self._journal_mode in {"WAL", "TRUNCATE"}:
+            conn.execute(f"PRAGMA journal_mode={self._journal_mode}")
+        return conn
+
+    async def execute(self, query: str, params: Tuple = ()) -> int:
+        """Execute a SQL query with parameters and return the affected row count."""
         async with self._lock:
             def _execute():
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.row_factory = sqlite3.Row
+                with closing(self._connect()) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     conn.commit()
@@ -135,8 +154,7 @@ class Database:
         """Fetch a single row from a SELECT query."""
         async with self._lock:
             def _fetch():
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.row_factory = sqlite3.Row
+                with closing(self._connect()) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     row = cursor.fetchone()
@@ -152,8 +170,7 @@ class Database:
         """Fetch all rows from a SELECT query."""
         async with self._lock:
             def _fetch():
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.row_factory = sqlite3.Row
+                with closing(self._connect()) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     return [tuple(row) for row in cursor.fetchall()]
@@ -168,8 +185,7 @@ class Database:
         """Fetch a single row as a dictionary."""
         async with self._lock:
             def _fetch():
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.row_factory = sqlite3.Row
+                with closing(self._connect()) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     row = cursor.fetchone()
@@ -185,8 +201,7 @@ class Database:
         """Fetch all rows as dictionaries."""
         async with self._lock:
             def _fetch():
-                with sqlite3.connect(self.db_path) as conn:
-                    conn.row_factory = sqlite3.Row
+                with closing(self._connect()) as conn:
                     cursor = conn.cursor()
                     cursor.execute(query, params)
                     return [dict(row) for row in cursor.fetchall()]
@@ -447,35 +462,31 @@ class Database:
 
     async def update_session_heartbeat(self, session_uuid: str) -> None:
         """Update session heartbeat timestamp."""
+        now = datetime.now().isoformat()
+        expires_at = datetime.fromtimestamp(time.time() + 300).isoformat()
         await self.execute(
-            "UPDATE sessions SET heartbeat_at = ?, updated_at = ? WHERE uuid = ?",
-            (datetime.now().isoformat(), datetime.now().isoformat(), session_uuid)
+            "UPDATE sessions SET heartbeat_at = ?, updated_at = ?, expires_at = ?, status = 'active' WHERE uuid = ?",
+            (now, now, expires_at, session_uuid)
         )
 
     async def cleanup_stale_sessions(self, timeout_seconds: int = 30) -> int:
         """Mark sessions as stale if no heartbeat received within timeout."""
         cutoff = datetime.fromtimestamp(time.time() - timeout_seconds).isoformat()
 
-        await self.execute(
+        return await self.execute(
             """UPDATE sessions SET status = 'stale'
                WHERE status = 'active' AND heartbeat_at < ?""",
             (cutoff,)
         )
 
-        result = await self.fetch_one("SELECT changes() as count")
-        return result[0] if result else 0
-
     async def cleanup_old_sessions(self, age_hours: int = 1) -> int:
         """Delete sessions older than specified hours."""
         cutoff = datetime.fromtimestamp(time.time() - (age_hours * 3600)).isoformat()
 
-        await self.execute(
+        return await self.execute(
             "DELETE FROM sessions WHERE created_at < ?",
             (cutoff,)
         )
-
-        result = await self.fetch_one("SELECT changes() as count")
-        return result[0] if result else 0
 
     # Template operations
 

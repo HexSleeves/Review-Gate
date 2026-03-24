@@ -1,5 +1,3 @@
-from .server import ReviewGateServer
-from .ipc import IPCManager
-from .speech import SpeechHandler
+from .version import VERSION
 
-__version__ = "2.7.3"
+__version__ = VERSION

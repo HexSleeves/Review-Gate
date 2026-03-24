@@ -8,6 +8,7 @@ let state = {
   currentTriggerData: null,
   currentRecording: null,
   context: null,
+  logFilePath: null,
 };
 
 module.exports = state;

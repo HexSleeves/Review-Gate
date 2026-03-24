@@ -1,10 +1,19 @@
-import fs from "node:fs";
-import vscode from "vscode";
-import state from "./state";
-import { getTempPath } from "./utils";
+const fs = require("node:fs");
+const vscode = require("vscode");
+const state = require("./state");
+const {
+  REVIEW_GATE_PROTOCOL,
+  atomicWriteJson,
+  createTriggerTracker,
+  getAckFilePath,
+  getProgressFilePath,
+  getTriggerFilePath,
+} = require("./ipcFiles");
 
 // Lazy load webview to avoid circular dependency
 let webviewModule = null;
+const handledTriggers = createTriggerTracker();
+
 function getWebviewModule() {
   if (!webviewModule) {
     webviewModule = require("./webview");
@@ -34,7 +43,10 @@ function startMcpStatusMonitoring(context) {
 function checkMcpStatus() {
   try {
     // Check if MCP server log exists and is recent
-    const mcpLogPath = getTempPath("review_gate_v2.log");
+    const mcpLogPath = state.logFilePath;
+    if (!mcpLogPath) {
+      return;
+    }
     if (fs.existsSync(mcpLogPath)) {
       const stats = fs.statSync(mcpLogPath);
       const now = Date.now();
@@ -74,21 +86,14 @@ function updateChatPanelStatus() {
 
 function startReviewGateIntegration(context) {
   // Watch for Review Gate trigger file
-  const triggerFilePath = getTempPath("review_gate_trigger.json");
+  const triggerFilePath = getTriggerFilePath();
 
   // Check for existing trigger file first
   checkTriggerFile(context, triggerFilePath);
 
   // Use a more robust polling approach
   const pollInterval = setInterval(() => {
-    // Check main trigger file
     checkTriggerFile(context, triggerFilePath);
-
-    // Check backup trigger files
-    for (let i = 0; i < 3; i++) {
-      const backupTriggerPath = getTempPath(`review_gate_trigger_${i}.json`);
-      checkTriggerFile(context, backupTriggerPath);
-    }
 
     // Check progress update file
     checkProgressFile();
@@ -116,14 +121,14 @@ function startReviewGateIntegration(context) {
 
 function checkProgressFile() {
   try {
-    const progressFilePath = getTempPath("review_gate_progress.json");
+    const progressFilePath = getProgressFilePath();
 
     if (fs.existsSync(progressFilePath)) {
       const data = fs.readFileSync(progressFilePath, "utf8");
       const progressData = JSON.parse(data);
 
       // Verify this is a progress update from Review Gate
-      if (progressData.type === "progress_update" && progressData.system === "review-gate-v2") {
+      if (progressData.type === "progress_update" && progressData.system === REVIEW_GATE_PROTOCOL) {
         const { title, percentage, step, status } = progressData.data;
 
         console.log(`📊 Progress: ${percentage}% - ${step}`);
@@ -168,7 +173,18 @@ function checkTriggerFile(context, filePath) {
         return;
       }
 
-      if (triggerData.system && triggerData.system !== "review-gate-v2") {
+      if (triggerData.system && triggerData.system !== REVIEW_GATE_PROTOCOL) {
+        return;
+      }
+
+      const triggerId = triggerData.data?.trigger_id;
+      if (!handledTriggers.markHandled(triggerId)) {
+        console.log(`Ignoring duplicate Review Gate trigger: ${triggerId}`);
+        try {
+          fs.unlinkSync(filePath);
+        } catch (cleanupError) {
+          console.log(`Could not clean duplicate trigger file: ${cleanupError.message}`);
+        }
         return;
       }
 
@@ -240,12 +256,12 @@ function sendExtensionAcknowledgement(triggerId, toolType) {
       timestamp: timestamp,
       trigger_id: triggerId,
       tool_type: toolType,
-      extension: "review-gate-v2",
+      extension: REVIEW_GATE_PROTOCOL,
       popup_activated: true,
     };
 
-    const ackFile = getTempPath(`review_gate_ack_${triggerId}.json`);
-    fs.writeFileSync(ackFile, JSON.stringify(ackData, null, 2));
+    const ackFile = getAckFilePath(triggerId);
+    atomicWriteJson(ackFile, ackData);
   } catch (error) {
     console.log(`Could not send extension acknowledgement: ${error.message}`);
   }

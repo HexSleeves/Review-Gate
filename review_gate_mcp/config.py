@@ -15,7 +15,7 @@ def get_temp_path(filename: str) -> str:
     return os.path.join(temp_dir, filename)
 
 def setup_logging():
-    log_file_path = get_temp_path('review_gate_v2.log')
+    log_file_path = get_temp_path('review_gate_v3.log')
 
     # Create handlers separately to handle Windows file issues
     handlers = []
@@ -40,7 +40,7 @@ def setup_logging():
     )
     logger = logging.getLogger("review_gate_mcp")
     logger.info(f"🔧 Log file path: {log_file_path}")
-    
+
     return logger
 
 logger = setup_logging()

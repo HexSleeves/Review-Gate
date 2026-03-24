@@ -1,6 +1,7 @@
 const fs = require("fs");
 const state = require("./state");
 const { getTempPath } = require("./utils");
+const { atomicWriteJson, getResponseFilePath } = require("./ipcFiles");
 
 function logMessage(message) {
   const timestamp = new Date().toISOString();
@@ -27,36 +28,20 @@ function logUserInput(inputText, eventType = "MESSAGE", triggerId = null, attach
 
     // Write response file for MCP server integration if we have a trigger ID
     if (triggerId && eventType === "MCP_RESPONSE") {
-      // Write multiple response file patterns for better compatibility
-      const responsePatterns = [
-        getTempPath(`review_gate_response_${triggerId}.json`),
-        getTempPath("review_gate_response.json"), // Fallback generic response
-        getTempPath(`mcp_response_${triggerId}.json`), // Alternative pattern
-        getTempPath("mcp_response.json"), // Generic MCP response
-      ];
-
       const responseData = {
         timestamp: timestamp,
         trigger_id: triggerId,
         user_input: inputText,
-        response: inputText, // Also provide as 'response' field
-        message: inputText, // Also provide as 'message' field
-        attachments: attachments, // Include image attachments
+        response: inputText,
+        message: inputText,
+        attachments: attachments,
         event_type: eventType,
         source: "review_gate_extension",
       };
 
-      const responseJson = JSON.stringify(responseData, null, 2);
-
-      // Write to all response file patterns
-      responsePatterns.forEach((responseFile) => {
-        try {
-          fs.writeFileSync(responseFile, responseJson);
-          logMessage(`MCP response written: ${responseFile}`);
-        } catch (writeError) {
-          logMessage(`Failed to write response file ${responseFile}: ${writeError.message}`);
-        }
-      });
+      const responseFile = getResponseFilePath(triggerId);
+      atomicWriteJson(responseFile, responseData);
+      logMessage(`MCP response written: ${responseFile}`);
     }
   } catch (error) {
     logMessage(`Could not write to Review Gate log file: ${error.message}`);

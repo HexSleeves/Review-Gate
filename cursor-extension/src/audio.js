@@ -1,7 +1,13 @@
-import fs from "node:fs";
-import { spawn } from "node:child_process";
-import state from "./state";
-import { getTempPath } from "./utils";
+const fs = require("node:fs");
+const { spawn } = require("node:child_process");
+const state = require("./state");
+const { getTempPath } = require("./utils");
+const {
+  REVIEW_GATE_PROTOCOL,
+  atomicWriteJson,
+  getSpeechResponseFilePath,
+  getSpeechTriggerFilePath,
+} = require("./ipcFiles");
 
 async function validateSoxSetup() {
   /**
@@ -318,7 +324,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
     // Send to MCP server for transcription
     const transcriptionRequest = {
       timestamp: new Date().toISOString(),
-      system: "review-gate-v2",
+      system: REVIEW_GATE_PROTOCOL,
       editor: "cursor",
       data: {
         tool: "speech_to_text",
@@ -329,8 +335,8 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
       mcp_integration: true,
     };
 
-    const triggerFile = getTempPath(`review_gate_speech_trigger_${triggerId}.json`);
-    fs.writeFileSync(triggerFile, JSON.stringify(transcriptionRequest, null, 2));
+    const triggerFile = getSpeechTriggerFilePath(triggerId);
+    atomicWriteJson(triggerFile, transcriptionRequest);
 
     console.log(`Speech-to-text request sent: ${triggerFile}`);
 
@@ -340,7 +346,7 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
     let waitTime = 0;
 
     const pollForResult = setInterval(() => {
-      const resultFile = getTempPath(`review_gate_speech_response_${triggerId}.json`);
+      const resultFile = getSpeechResponseFilePath(triggerId);
 
       if (fs.existsSync(resultFile)) {
         try {
@@ -358,6 +364,12 @@ async function handleSpeechToText(audioData, triggerId, isFilePath = false) {
             // We need to log user input here but logUserInput is in IPC.
             // We will rely on console.log here and let IPC handle main logging
             console.log(`Speech transcribed: ${result.transcription}`);
+          } else if (result.error && state.chatPanel) {
+            state.chatPanel.webview.postMessage({
+              command: "speechTranscribed",
+              transcription: "",
+              error: result.error,
+            });
           }
 
           // Cleanup handled by MCP server mostly but clean up local triggers

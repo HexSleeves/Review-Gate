@@ -51,16 +51,18 @@
   },
   "scripts": {
     "compile": "npm run check-types && node esbuild.js",
-    "check-types": "tsc --noEmit",
+    "check-types": "tsc --project tsconfig.json --noEmit",
     "watch": "npm-run-all -p watch:*",
     "watch:esbuild": "node esbuild.js --watch",
     "vscode:prepublish": "npm run package",
     "package": "node esbuild.js --production",
     "lint": "eslint src",
+    "test": "node --test tests/**/*.test.cjs",
     "format": "prettier --write \"src/**/*.{js,json,css}\"",
     "format:check": "prettier --check \"src/**/*.{js,json,css}\""
   },
   "devDependencies": {
+    "@types/node": "^24.8.1",
     "@eslint/css": "^0.14.1",
     "@eslint/js": "^9.39.2",
     "@eslint/json": "^0.14.0",
@@ -69,6 +71,8 @@
     "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",
-    "prettier": "4.0.0-alpha.13"
+    "npm-run-all": "^4.1.5",
+    "prettier": "4.0.0-alpha.13",
+    "typescript": "^5.9.3"
   }
 }

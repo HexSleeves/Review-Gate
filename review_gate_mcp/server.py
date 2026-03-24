@@ -22,6 +22,7 @@ from .ipc import IPCManager
 from .resources import get_resource_manager
 from .speech import SpeechHandler
 from .prompts import get_prompt_manager
+from .version import VERSION
 
 class ReviewGateServer:
     def __init__(self):
@@ -40,7 +41,7 @@ class ReviewGateServer:
 
         self.setup_handlers()
 
-        logger.info("🚀 Review Gate 2.0 server initialized for Cursor integration")
+        logger.info(f"🚀 Review Gate V{VERSION} server initialized for Cursor integration")
 
     def setup_handlers(self):
         """Set up MCP request handlers"""
@@ -682,7 +683,7 @@ class ReviewGateServer:
         """Handle status retrieval requests."""
         status = {
             "server": "Review Gate V3",
-            "version": "2.0.0",
+            "version": VERSION,
             "status": "active",
             "timestamp": datetime.now().isoformat(),
             "features": {
@@ -721,7 +722,7 @@ class ReviewGateServer:
 
     async def run(self):
         """Run the Review Gate server with immediate activation capability and shutdown monitoring"""
-        logger.info("🚀 Starting Review Gate 2.0 MCP Server for IMMEDIATE Cursor integration...")
+        logger.info(f"🚀 Starting Review Gate V{VERSION} MCP server for Cursor integration...")
 
         # Initialize database
         try:
@@ -779,6 +780,14 @@ class ReviewGateServer:
                 await asyncio.sleep(10)
                 heartbeat_count += 1
 
+                if self._db and heartbeat_count % 6 == 0:
+                    stale_sessions = await self._db.cleanup_stale_sessions(timeout_seconds=300)
+                    old_sessions = await self._db.cleanup_old_sessions(age_hours=24)
+                    if stale_sessions or old_sessions:
+                        logger.info(
+                            f"🧹 Session maintenance complete: stale={stale_sessions}, removed={old_sessions}"
+                        )
+
                 # Write heartbeat to log
                 logger.info(f"💓 MCP heartbeat #{heartbeat_count} - Server is active and ready")
 
@@ -795,31 +804,6 @@ class ReviewGateServer:
 
     async def _monitor_shutdown(self):
         """Monitor for shutdown requests in a separate task"""
-        # This implementation simply waits forever unless external shutdown is requested
-        # In the original code, this was used to coordinate shutdown_mcp tool call
-        # which set self.shutdown_requested = True.
-        # Since I haven't implemented shutdown_mcp tool in this simplified version yet,
-        # this loop just waits.
-        # But wait, I should probably implement the other tools too if they were important.
-        # For now, I only implemented 'review_gate_chat' as it was the main one shown in list_tools
-        # in the original file I read.
-
-        # Checking the original file again...
-        # list_tools() only listed 'review_gate_chat'.
-        # But 'call_tool' had handling for 'review_gate_chat'.
-        # However, '_handle_unified_review_gate' and others were defined but seemingly not exposed in list_tools?
-        # Ah, I see:
-        # The original code had `_handle_unified_review_gate` etc. but `list_tools` ONLY returned `review_gate_chat`.
-        # So effectively only `review_gate_chat` was callable by the agent.
-        # Unless I missed something.
-        # Let's check call_tool again in original file.
-        # if name == "review_gate_chat": return await self._handle_review_gate_chat(arguments)
-        # else: logger.error...
-
-        # So yes, only `review_gate_chat` was actually exposed and working.
-        # The other methods were likely dead code or for future use.
-        # I will stick to what was exposed.
-
         while not self.shutdown_requested:
             await asyncio.sleep(1)
 

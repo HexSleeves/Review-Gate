@@ -5,7 +5,7 @@ This file contains essential information for agentic coding assistants working o
 ## Project Structure
 
 - `cursor-extension/` - VSCode/Cursor extension (Node.js, CommonJS)
-- `review_gate_mcp/` - MCP server (Python 3.8+, asyncio)
+- `review_gate_mcp/` - MCP server (Python 3.10+, asyncio)
 - `tests/` - Python unit tests using unittest
 - `install.sh` / `uninstall.sh` - Installation scripts
 
@@ -26,10 +26,17 @@ npm run format:check     # Check formatting without changes
 ### Python MCP Server
 
 ```bash
-pytest                           # Run all tests
-pytest tests/test_server.py        # Run specific test file
-pytest tests/test_server.py::TestReviewGateServer::test_server_initialization  # Run single test
-pytest -xvs tests/test_server.py # Verbose, stop on first failure
+python3 -m unittest discover -s tests -v
+python3 -m compileall review_gate_mcp
+```
+
+### Extension Tests
+
+```bash
+cd cursor-extension
+npm install
+npm run compile
+npm run test
 ```
 
 ## Code Style Guidelines

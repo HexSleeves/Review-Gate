@@ -7,7 +7,7 @@ name = "review-gate-mcp"
 version = "3.0.0"
 description = "Advanced MCP Server with Cursor Integration"
 authors = [{ name = "Lakshman Turlapati", email = "your.email@example.com" }]
-readme = "README.md"
+readme = "readme.md"
 requires-python = ">=3.10"
 classifiers = [
   "Programming Language :: Python :: 3",
@@ -16,7 +16,6 @@ classifiers = [
 ]
 dependencies = [
     "mcp>=1.26.0",
-    "asyncio",
     "typing-extensions>=4.15.0",
     "Pillow>=12.1.1",
 ]
@@ -24,12 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 speech = ["faster-whisper>=1.0.0"]
 [project.scripts]
-review-gate-mcp = "review_gate_mcp.main:main"
+review-gate-mcp = "review_gate_mcp.main:cli"
 
 [tool.setuptools.packages.find]
 where   = ["."]
 include = ["review_gate_mcp*"]
-
-[tool.pytest.ini_options]
-testpaths    = ["tests"]
-python_files = "test_*.py"

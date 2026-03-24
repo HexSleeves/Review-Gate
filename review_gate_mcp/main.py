@@ -21,7 +21,9 @@ async def main():
         logger.error(traceback.format_exc())
         raise
 
-if __name__ == "__main__":
+
+def cli():
+    """Console-script entrypoint."""
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
@@ -29,3 +31,6 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"❌ Server crashed: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    cli()

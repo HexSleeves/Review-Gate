@@ -1,21 +1,17 @@
 #!/bin/bash
 
 # Review Gate V3 - Uninstaller Script
-# Author: Lakshman Turlapati
 
-set -e
+set -euo pipefail
 
-# Enhanced colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 WHITE='\033[1;37m'
 CYAN='\033[0;36m'
-GRAY='\033[0;37m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Enhanced logging functions
 log_error() { echo -e "${RED}ERROR: $1${NC}"; }
 log_success() { echo -e "${GREEN}SUCCESS: $1${NC}"; }
 log_info() { echo -e "${YELLOW}INFO: $1${NC}"; }
@@ -24,98 +20,77 @@ log_warning() { echo -e "${YELLOW}WARNING: $1${NC}"; }
 log_step() { echo -e "${WHITE}$1${NC}"; }
 log_header() { echo -e "${BLUE}$1${NC}"; }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+CURSOR_MCP_FILE="${HOME}/.cursor/mcp.json"
+INSTALL_DIRS=(
+  "${HOME}/cursor-extensions/review-gate-v3"
+  "${HOME}/cursor-extensions/review-gate-v2"
+)
+
+run_install_helper() {
+  PYTHONPATH="${SCRIPT_DIR}" python3 -m review_gate_mcp.install_utils "$@"
+}
+
 log_header "Review Gate V3 - Uninstaller"
 log_header "============================="
 echo ""
 
 read -p "$(echo -e ${YELLOW}WARNING: Are you sure you want to uninstall Review Gate V3? [y/N]: ${NC})" -n 1 -r
 echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    log_info "Uninstallation cancelled"
-    exit 0
+if [[ ! ${REPLY} =~ ^[Yy]$ ]]; then
+  log_info "Uninstallation cancelled"
+  exit 0
 fi
 
-log_progress "Removing Review Gate V3..."
+log_progress "Removing Review Gate files..."
+for install_dir in "${INSTALL_DIRS[@]}"; do
+  if [[ -d "${install_dir}" ]]; then
+    rm -rf "${install_dir}"
+    log_success "Removed ${install_dir}"
+  fi
+done
 
-# Remove installation directory
-REVIEW_GATE_DIR="$HOME/cursor-extensions/review-gate-v2"
-if [[ -d "$REVIEW_GATE_DIR" ]]; then
-    rm -rf "$REVIEW_GATE_DIR"
-    log_success "Removed installation directory"
+if [[ -f "${CURSOR_MCP_FILE}" ]]; then
+  cp "${CURSOR_MCP_FILE}" "${CURSOR_MCP_FILE}.backup"
+  if python3 -c "import json,sys; json.load(open(sys.argv[1]))" "${CURSOR_MCP_FILE}" >/dev/null 2>&1; then
+    run_install_helper remove-config --config "${CURSOR_MCP_FILE}"
+    log_success "Removed Review Gate MCP entries from ${CURSOR_MCP_FILE}"
+  else
+    log_warning "Skipped MCP config cleanup because ${CURSOR_MCP_FILE} is invalid JSON"
+  fi
 fi
 
-# Remove MCP configuration
-CURSOR_MCP_FILE="$HOME/.cursor/mcp.json"
-if [[ -f "$CURSOR_MCP_FILE" ]]; then
-    # Create backup
-    cp "$CURSOR_MCP_FILE" "$CURSOR_MCP_FILE.backup"
-
-    # Remove review-gate-v2 entry (simple approach - remove entire config)
-    echo '{"mcpServers":{}}' > "$CURSOR_MCP_FILE"
-    log_success "Removed MCP configuration (backup created)"
-fi
-
-# Remove global rule - Cross-platform directory detection
 if [[ "$(uname)" == "Darwin" ]]; then
-    CURSOR_RULES_DIR="$HOME/Library/Application Support/Cursor/User/rules"
+  CURSOR_RULES_DIR="${HOME}/Library/Application Support/Cursor/User/rules"
 elif [[ "$(uname)" == "Linux" ]]; then
-    CURSOR_RULES_DIR="$HOME/.config/Cursor/User/rules"
+  CURSOR_RULES_DIR="${HOME}/.config/Cursor/User/rules"
+else
+  CURSOR_RULES_DIR=""
 fi
 
-if [[ -n "$CURSOR_RULES_DIR" ]] && [[ -f "$CURSOR_RULES_DIR/ReviewGate.mdc" ]]; then
-    rm "$CURSOR_RULES_DIR/ReviewGate.mdc"
-    log_success "Removed global rule"
+if [[ -n "${CURSOR_RULES_DIR}" && -f "${CURSOR_RULES_DIR}/ReviewGate.mdc" ]]; then
+  rm -f "${CURSOR_RULES_DIR}/ReviewGate.mdc"
+  log_success "Removed Cursor rule file"
 fi
 
-# Clean up temp files from both old (/tmp) and new (system temp) locations
 rm -f /tmp/review_gate_* /tmp/mcp_response* 2>/dev/null || true
 TEMP_DIR=$(python3 -c 'import tempfile; print(tempfile.gettempdir())' 2>/dev/null || echo "/tmp")
-rm -f "$TEMP_DIR"/review_gate_* "$TEMP_DIR"/mcp_response* 2>/dev/null || true
-log_success "Cleaned up temporary files"
+rm -f "${TEMP_DIR}"/review_gate_* "${TEMP_DIR}"/mcp_response* 2>/dev/null || true
+log_success "Cleaned temporary Review Gate files"
 
-# Try automated extension removal
 EXTENSION_REMOVED=false
 if command -v cursor &> /dev/null; then
-    log_progress "Attempting automated extension removal..."
-    if cursor --uninstall-extension review-gate-v2 >/dev/null 2>&1; then
-        log_success "Extension removed automatically via command line"
-        EXTENSION_REMOVED=true
-    else
-        log_warning "Automated removal failed, manual steps required"
+  for extension_id in review-gate-v3 review-gate-v2; do
+    if cursor --uninstall-extension "${extension_id}" >/dev/null 2>&1; then
+      EXTENSION_REMOVED=true
+      log_success "Removed extension ${extension_id}"
     fi
+  done
+fi
+
+if [[ "${EXTENSION_REMOVED}" == false ]]; then
+  log_warning "Automatic extension removal did not run. Remove 'Review Gate V3' from Cursor manually if it is still installed."
 fi
 
 echo ""
-if [[ "$EXTENSION_REMOVED" == false ]]; then
-    log_header "Manual Steps Required:"
-    log_step "1. Open Cursor IDE"
-    log_step "2. Go to Extensions (Cmd+Shift+X or Ctrl+Shift+X)"
-    log_step "3. Find 'Review Gate V3' and uninstall it"
-    log_step "4. Restart Cursor"
-    echo ""
-fi
-
-log_success "Review Gate V3 uninstallation complete!"
-log_header "========================================="
-echo ""
-log_header "What was removed:"
-log_step "   - Installation directory: $REVIEW_GATE_DIR"
-log_step "   - MCP server configuration entry"
-log_step "   - Global rule file: $CURSOR_RULES_DIR/ReviewGate.mdc"
-log_step "   - Temporary files from system directories"
-if [[ "$EXTENSION_REMOVED" == true ]]; then
-    log_step "   - Cursor extension (removed automatically)"
-else
-    log_step "   - Cursor extension (manual removal required)"
-fi
-echo ""
-log_header "What remains (if any):"
-log_step "   - SoX installation (keep if needed for other apps)"
-log_step "   - Python virtual environment dependencies"
-log_step "   - Configuration backups (preserved for safety)"
-echo ""
-if [[ "$EXTENSION_REMOVED" == false ]]; then
-    log_info "Extension must be removed manually from Cursor"
-else
-    log_success "All components removed successfully!"
-fi
+log_success "Review Gate V3 uninstallation complete"

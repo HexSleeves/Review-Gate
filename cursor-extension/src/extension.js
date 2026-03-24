@@ -1,6 +1,7 @@
 const vscode = require("vscode");
 const state = require("./state");
 const { startMcpStatusMonitoring, startReviewGateIntegration } = require("./ipc");
+const { getTempPath } = require("./utils");
 const { openReviewGatePopup } = require("./webview");
 
 function activate(context) {
@@ -8,6 +9,7 @@ function activate(context) {
 
   // Create output channel for logging
   state.outputChannel = vscode.window.createOutputChannel("Review Gate V3");
+  state.logFilePath = getTempPath("review_gate_v3.log");
   context.subscriptions.push(state.outputChannel);
 
   // Register command to open Review Gate manually
