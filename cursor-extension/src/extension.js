@@ -15,7 +15,7 @@ function activate(context) {
   // Register command to open Review Gate manually
   let disposable = vscode.commands.registerCommand("reviewGate.openChat", () => {
     openReviewGatePopup(context, {
-      message: "Welcome to Review Gate V3! Please provide your review or feedback.",
+      message: "Welcome to Review Gate. Start a new review or resume a prior draft.",
       title: "Review Gate",
     });
   });
@@ -27,10 +27,6 @@ function activate(context) {
 
   // Start Review Gate integration immediately
   startReviewGateIntegration(context);
-
-  vscode.window.showInformationMessage(
-    "Review Gate V3 activated! Use Cmd+Shift+R or wait for MCP tool calls."
-  );
 }
 
 function deactivate() {

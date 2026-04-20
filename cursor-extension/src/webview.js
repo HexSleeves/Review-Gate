@@ -1,102 +1,85 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const vscode = require("vscode");
 const state = require("./state");
-const { logUserInput } = require("./logger");
 const { startNodeRecording, stopNodeRecording } = require("./audio");
 const { getMimeType } = require("./utils");
-const vscode = require("vscode");
+const { logUserInput } = require("./logger");
+
+function createSessionPayload(options = {}) {
+  return {
+    message: options.message || "Welcome to Review Gate. Start a new review or resume a prior draft.",
+    title: options.title || "Review Gate",
+    autoFocus: Boolean(options.autoFocus),
+    mcpIntegration: Boolean(options.mcpIntegration),
+    toolData: options.toolData || null,
+    triggerId: options.triggerId || null,
+    specialHandling: options.specialHandling || null,
+    openedAt: new Date().toISOString(),
+  };
+}
+
+function serializeForWebview(data) {
+  return JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026");
+}
+
+function postToChatPanel(message) {
+  if (state.chatPanel?.webview) {
+    state.chatPanel.webview.postMessage(message);
+  }
+}
 
 function openReviewGatePopup(context, options = {}) {
-  const {
-    message = "Welcome to Review Gate V3! Please provide your review or feedback.",
-    title = "Review Gate",
-    autoFocus = false,
-    toolData = null,
-    mcpIntegration = false,
-    triggerId = null,
-    specialHandling = null,
-  } = options;
+  const sessionPayload = createSessionPayload(options);
+  const { autoFocus, message, title, toolData, mcpIntegration, triggerId, specialHandling } =
+    sessionPayload;
 
-  // Store trigger ID in current trigger data for use in message handlers
   if (triggerId) {
     state.currentTriggerData = { ...toolData, trigger_id: triggerId };
   }
 
   if (state.chatPanel) {
     state.chatPanel.reveal(vscode.ViewColumn.One);
-    // Always use consistent title
     state.chatPanel.title = "Review Gate";
 
-    // Send new message to existing panel (fixes issue where only first message showed)
-    if (message && !message.includes("I have completed")) {
-      setTimeout(() => {
-        state.chatPanel.webview.postMessage({
-          command: "addMessage",
-          text: message,
-          type: mcpIntegration ? "assistant" : "system",
-          plain: !mcpIntegration,
-          toolData: toolData,
-          mcpIntegration: mcpIntegration,
-          triggerId: triggerId,
-          specialHandling: specialHandling,
-        });
-      }, 150);
-    }
+    setTimeout(() => {
+      postToChatPanel({
+        command: "configureSession",
+        payload: sessionPayload,
+      });
+    }, 100);
 
-    // Set MCP status to active when revealing panel for new input
-    if (mcpIntegration) {
-      setTimeout(() => {
-        state.chatPanel.webview.postMessage({
-          command: "updateMcpStatus",
-          active: true,
-        });
-      }, 200);
-    }
-
-    // Auto-focus if requested
     if (autoFocus) {
       setTimeout(() => {
-        state.chatPanel.webview.postMessage({
-          command: "focus",
-        });
-      }, 300);
+        postToChatPanel({ command: "focus" });
+      }, 220);
     }
 
     return;
   }
 
-  // Create webview panel
-  state.chatPanel = vscode.window.createWebviewPanel(
-    "reviewGateChat",
-    title,
-    vscode.ViewColumn.One,
-    {
-      enableScripts: true,
-      retainContextWhenHidden: true,
-    }
-  );
+  state.chatPanel = vscode.window.createWebviewPanel("reviewGateChat", title, vscode.ViewColumn.One, {
+    enableScripts: true,
+    retainContextWhenHidden: true,
+  });
 
-  // Set the HTML content
-  state.chatPanel.webview.html = getReviewGateHTML(title, mcpIntegration);
+  state.chatPanel.webview.html = getReviewGateHTML(sessionPayload);
 
-  // Handle messages from webview
   state.chatPanel.webview.onDidReceiveMessage(
     (webviewMessage) => {
-      // Get trigger ID from current trigger data or passed options
       const currentTriggerId = state.currentTriggerData?.trigger_id || triggerId;
 
       switch (webviewMessage.command) {
-        case "send": {
-          // Log the user input and write response file for MCP integration
-          const eventType = mcpIntegration ? "MCP_RESPONSE" : "REVIEW_SUBMITTED";
-
+        case "send":
           logUserInput(
             webviewMessage.text,
-            eventType,
+            mcpIntegration ? "MCP_RESPONSE" : "REVIEW_SUBMITTED",
             currentTriggerId,
             webviewMessage.attachments || []
           );
-
           handleReviewMessage(
             webviewMessage.text,
             webviewMessage.attachments,
@@ -105,7 +88,6 @@ function openReviewGatePopup(context, options = {}) {
             specialHandling
           );
           break;
-        }
         case "attach":
           logUserInput("User clicked attachment button", "ATTACHMENT_CLICK", currentTriggerId);
           handleFileAttachment(currentTriggerId);
@@ -147,25 +129,16 @@ function openReviewGatePopup(context, options = {}) {
           vscode.window.showErrorMessage(webviewMessage.message);
           break;
         case "ready":
-          // Send initial MCP status
-          state.chatPanel.webview.postMessage({
+          postToChatPanel({
             command: "updateMcpStatus",
             active: mcpIntegration ? true : state.mcpStatus,
           });
-          // Send message for both manual opens AND MCP tool calls
-          // For MCP, show as assistant message; for manual, show as system message
-          if (message && !message.includes("I have completed")) {
-            state.chatPanel.webview.postMessage({
-              command: "addMessage",
-              text: message,
-              type: mcpIntegration ? "assistant" : "system",
-              plain: !mcpIntegration,
-              toolData: toolData,
-              mcpIntegration: mcpIntegration,
-              triggerId: triggerId,
-              specialHandling: specialHandling,
-            });
-          }
+          postToChatPanel({
+            command: "configureSession",
+            payload: sessionPayload,
+          });
+          break;
+        default:
           break;
       }
     },
@@ -173,7 +146,6 @@ function openReviewGatePopup(context, options = {}) {
     context.subscriptions
   );
 
-  // Clean up when panel is closed
   state.chatPanel.onDidDispose(
     () => {
       state.chatPanel = null;
@@ -183,61 +155,37 @@ function openReviewGatePopup(context, options = {}) {
     context.subscriptions
   );
 
-  // Auto-focus if requested
   if (autoFocus) {
     setTimeout(() => {
-      state.chatPanel.webview.postMessage({
-        command: "focus",
-      });
-    }, 200);
+      postToChatPanel({ command: "focus" });
+    }, 220);
   }
 }
 
-function handleReviewMessage(text, attachments, triggerId, mcpIntegration, specialHandling) {
-  const funnyResponses = [
-    "Review sent - Hold on to your pants until the review gate is called again! 🎢",
-    "Message delivered! Agent is probably doing agent things now... ⚡",
-    "Your wisdom has been transmitted to the digital overlords! 🤖",
-    "Response launched into the void - expect agent magic soon! ✨",
-    "Review gate closed - Agent is chewing on your input! 🍕",
-    "Message received and filed under 'Probably Important'! 📁",
-    "Your input is now part of the agent's master plan! 🧠",
-    "Review sent - The agent owes you one! 🤝",
-    "Success! Your thoughts are now haunting the agent's dreams! 👻",
-    "Delivered faster than pizza on a Friday night! 🍕",
-  ];
-
-  // Standard handling for other tools
-  // Log to output channel for persistence
+function handleReviewMessage(text, attachments, triggerId, mcpIntegration) {
   if (state.outputChannel) {
     state.outputChannel.appendLine(
       `${mcpIntegration ? "MCP RESPONSE" : "REVIEW"} SUBMITTED: ${text}`
     );
   }
 
-  // Send standard response back to webview
   if (state.chatPanel) {
+    const sentAt = new Date().toISOString();
     setTimeout(() => {
-      // Pick a random funny response
-      const randomResponse = funnyResponses[Math.floor(Math.random() * funnyResponses.length)];
-
-      state.chatPanel.webview.postMessage({
-        command: "addMessage",
-        text: randomResponse,
-        type: "system",
-        plain: true, // Use plain styling for acknowledgments
+      postToChatPanel({
+        command: "responseAcknowledged",
+        payload: {
+          sessionId: triggerId || `manual-${Date.now()}`,
+          triggerId: triggerId || null,
+          destination: mcpIntegration ? "Returned to MCP client" : "Saved to Review Gate log",
+          summary: mcpIntegration
+            ? "Response delivered through the current Review Gate flow."
+            : "Manual review saved in the Review Gate session log.",
+          sentAt,
+          attachmentCount: Array.isArray(attachments) ? attachments.length : 0,
+        },
       });
-
-      // Set MCP status to inactive after sending response
-      setTimeout(() => {
-        if (state.chatPanel) {
-          state.chatPanel.webview.postMessage({
-            command: "updateMcpStatus",
-            active: false,
-          });
-        }
-      }, 1000);
-    }, 500);
+    }, 240);
   }
 }
 
@@ -255,7 +203,7 @@ function handleFileAttachment(triggerId) {
     .then((fileUris) => {
       if (fileUris && fileUris.length > 0) {
         const filePaths = fileUris.map((uri) => uri.fsPath);
-        const fileNames = filePaths.map((fp) => path.basename(fp));
+        const fileNames = filePaths.map((filePath) => path.basename(filePath));
 
         logUserInput(
           `Files selected for review: ${fileNames.join(", ")}`,
@@ -263,15 +211,11 @@ function handleFileAttachment(triggerId) {
           triggerId
         );
 
-        if (state.chatPanel) {
-          state.chatPanel.webview.postMessage({
-            command: "addMessage",
-            text: `Files attached for review:\n${fileNames
-              .map((name) => "• " + name)
-              .join("\n")}\n\nPaths:\n${filePaths.map((fp) => "• " + fp).join("\n")}`,
-            type: "system",
-          });
-        }
+        postToChatPanel({
+          command: "appendTranscript",
+          text: `Files attached for review:\n${fileNames.map((name) => "• " + name).join("\n")}`,
+          type: "system",
+        });
       } else {
         logUserInput("No files selected for review", "FILE_CANCELLED", triggerId);
       }
@@ -290,1452 +234,1538 @@ function handleImageUpload(triggerId) {
       },
     })
     .then((fileUris) => {
-      if (fileUris && fileUris.length > 0) {
-        fileUris.forEach((fileUri) => {
-          const filePath = fileUri.fsPath;
-          const fileName = path.basename(filePath);
-
-          try {
-            // Read the image file
-            const imageBuffer = fs.readFileSync(filePath);
-            const base64Data = imageBuffer.toString("base64");
-            const mimeType = getMimeType(fileName);
-            const dataUrl = `data:${mimeType};base64,${base64Data}`;
-
-            const imageData = {
-              fileName: fileName,
-              filePath: filePath,
-              mimeType: mimeType,
-              base64Data: base64Data,
-              dataUrl: dataUrl,
-              size: imageBuffer.length,
-            };
-
-            logUserInput(`Image uploaded: ${fileName}`, "IMAGE_UPLOADED", triggerId);
-
-            // Send image data to webview
-            if (state.chatPanel) {
-              state.chatPanel.webview.postMessage({
-                command: "imageUploaded",
-                imageData: imageData,
-              });
-            }
-          } catch (error) {
-            console.log(`Error processing image ${fileName}: ${error.message}`);
-            vscode.window.showErrorMessage(`Failed to process image: ${fileName}`);
-          }
-        });
-      } else {
+      if (!fileUris || fileUris.length === 0) {
         logUserInput("No images selected for upload", "IMAGE_CANCELLED", triggerId);
+        return;
       }
+
+      fileUris.forEach((fileUri) => {
+        const filePath = fileUri.fsPath;
+        const fileName = path.basename(filePath);
+
+        try {
+          const imageBuffer = fs.readFileSync(filePath);
+          const base64Data = imageBuffer.toString("base64");
+          const mimeType = getMimeType(fileName);
+          const dataUrl = `data:${mimeType};base64,${base64Data}`;
+
+          logUserInput(`Image uploaded: ${fileName}`, "IMAGE_UPLOADED", triggerId);
+
+          postToChatPanel({
+            command: "imageUploaded",
+            imageData: {
+              id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              fileName,
+              filePath,
+              mimeType,
+              base64Data,
+              dataUrl,
+              size: imageBuffer.length,
+            },
+          });
+        } catch (error) {
+          console.log(`Error processing image ${fileName}: ${error.message}`);
+          vscode.window.showErrorMessage(`Failed to process image: ${fileName}`);
+        }
+      });
     });
 }
-function getReviewGateHTML(title = "Review Gate", mcpIntegration = false) {
+
+function getReviewGateHTML(sessionPayload) {
+  const serializedSession = serializeForWebview(sessionPayload);
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body {
-            font-family: var(--vscode-font-family);
-            color: var(--vscode-foreground);
-            background: var(--vscode-editor-background);
-            margin: 0;
-            padding: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .review-container {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            max-width: 600px;
-            margin: 0 auto;
-            width: 100%;
-            animation: slideIn 0.3s ease-out;
-        }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .review-header {
-            flex-shrink: 0;
-            padding: 16px 20px 12px 20px;
-            border-bottom: 1px solid var(--vscode-panel-border);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background: var(--vscode-editor-background);
-        }
-
-        .review-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-        }
-
-        .review-author {
-            font-size: 12px;
-            opacity: 0.7;
-            margin-left: auto;
-        }
-
-        .status-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--vscode-charts-orange);
-            animation: pulse 2s infinite;
-            transition: background-color 0.3s ease;
-            margin-right: 4px;
-        }
-
-        .status-indicator.active {
-            background: var(--vscode-charts-green);
-        }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.5; }
-            100% { opacity: 1; }
-        }
-
-        .messages-container {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .message {
-            display: flex;
-            gap: 8px;
-            animation: messageSlide 0.3s ease-out;
-        }
-
-        @keyframes messageSlide {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .message.user {
-            justify-content: flex-end;
-        }
-
-        .message.assistant {
-            justify-content: flex-start;
-        }
-
-        .message.assistant .message-bubble {
-            background: var(--vscode-textCodeBlock-background);
-            color: var(--vscode-textCodeBlock-foreground);
-            border-bottom-left-radius: 6px;
-            border: 1px solid var(--vscode-panel-border);
-        }
-
-        .message-bubble {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-        }
-
-        .message.system .message-bubble {
-            background: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
-            border-bottom-left-radius: 6px;
-        }
-
-        .message.user .message-bubble {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border-bottom-right-radius: 6px;
-        }
-
-        .message.system.plain {
-            justify-content: center;
-            margin: 8px 0;
-        }
-
-        .message.system.plain .message-content {
-            background: none;
-            padding: 8px 16px;
-            border-radius: 0;
-            font-size: 13px;
-            opacity: 0.8;
-            font-style: italic;
-            text-align: center;
-            border: none;
-            color: var(--vscode-foreground);
-        }
-
-        /* Speech error message styling */
-        .message.system.plain .message-content[data-speech-error] {
-            background: rgba(255, 107, 53, 0.1);
-            border: 1px solid rgba(255, 107, 53, 0.3);
-            color: var(--vscode-errorForeground);
-            font-weight: 500;
-            opacity: 1;
-            padding: 12px 16px;
-            border-radius: 8px;
-        }
-
-        .message-time {
-            font-size: 11px;
-            opacity: 0.6;
-            margin-top: 4px;
-        }
-
-        .input-container {
-            flex-shrink: 0;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 16px 20px 20px 20px;
-            border-top: 1px solid var(--vscode-panel-border);
-            background: var(--vscode-editor-background);
-        }
-
-        .input-container.disabled {
-            opacity: 0.5;
-            pointer-events: none;
-        }
-
-        .input-wrapper {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            background: var(--vscode-input-background);
-            border: 1px solid var(--vscode-input-border);
-            border-radius: 20px;
-            padding: 8px 12px;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-
-        .mic-icon {
-            position: absolute;
-            left: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--vscode-input-placeholderForeground);
-            font-size: 14px;
-            pointer-events: none;
-            opacity: 0.7;
-            transition: all 0.2s ease;
-        }
-
-        .mic-icon.active {
-            color: #ff6b35;
-            opacity: 1;
-            pointer-events: auto;
-            cursor: pointer;
-        }
-
-        .mic-icon.recording {
-            color: #ff3333;
-            animation: pulse 1.5s infinite;
-        }
-
-        .mic-icon.processing {
-            color: #ff6b35;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: translateY(-50%) rotate(0deg); }
-            100% { transform: translateY(-50%) rotate(360deg); }
-        }
-
-        .input-wrapper:focus-within {
-            border-color: transparent;
-            box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.4), 0 0 8px rgba(255, 165, 0, 0.2);
-        }
-
-        .message-input {
-            flex: 1;
-            background: transparent;
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-            color: var(--vscode-input-foreground);
-            resize: none;
-            min-height: 20px;
-            max-height: 120px;
-            font-family: inherit;
-            font-size: 14px;
-            line-height: 1.4;
-            padding-left: 24px; /* Make room for mic icon */
-        }
-
-        .message-input:focus {
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-        }
-
-        .message-input:focus-visible {
-            border: none !important;
-            outline: none !important;
-            box-shadow: none !important;
-        }
-
-        .message-input::placeholder {
-            color: var(--vscode-input-placeholderForeground);
-        }
-
-        .message-input:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .message-input.paste-highlight {
-            box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.4) !important;
-            transition: box-shadow 0.2s ease;
-        }
-
-        .attach-button {
-            background: none;
-            border: none;
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            font-size: 14px;
-            padding: 4px;
-            border-radius: 50%;
-            width: 28px;
-            height: 28px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-        }
-
-        .attach-button:hover {
-            background: var(--vscode-button-hoverBackground);
-            transform: scale(1.1);
-        }
-
-        .attach-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .send-button {
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
-            font-size: 14px;
-        }
-
-        .send-button:hover {
-            background: var(--vscode-button-hoverBackground);
-            transform: scale(1.05);
-        }
-
-        .send-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .typing-indicator {
-            display: none;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            font-size: 12px;
-            opacity: 0.7;
-        }
-
-        .typing-dots {
-            display: flex;
-            gap: 2px;
-        }
-
-        .typing-dot {
-            width: 4px;
-            height: 4px;
-            background: var(--vscode-foreground);
-            border-radius: 50%;
-            animation: typingDot 1.4s infinite ease-in-out;
-        }
-
-        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
-
-        @keyframes typingDot {
-            0%, 80%, 100% { transform: scale(0); }
-            40% { transform: scale(1); }
-        }
-
-        .mcp-status {
-            font-size: 11px;
-            opacity: 0.6;
-            margin-left: 4px;
-        }
-
-        /* Drag and drop styling */
-        body.drag-over {
-            background: rgba(0, 123, 255, 0.05);
-        }
-
-        body.drag-over::before {
-            content: 'Drop images here to attach them';
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: var(--vscode-badge-background);
-            color: var(--vscode-badge-foreground);
-            padding: 16px 24px 16px 48px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            z-index: 1000;
-            pointer-events: none;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-            font-family: var(--vscode-font-family);
-        }
-
-        body.drag-over::after {
-            content: '\\f093';
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) translate(-120px, 0);
-            color: var(--vscode-badge-foreground);
-            font-size: 16px;
-            z-index: 1001;
-            pointer-events: none;
-            font-family: 'Font Awesome 6 Free';
-            font-weight: 900;
-        }
-
-        /* Image preview styling */
-        .image-preview {
-            position: relative;
-        }
-
-        .image-container {
-            position: relative;
-        }
-
-        .image-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .image-filename {
-            font-size: 12px;
-            font-weight: 500;
-            opacity: 0.9;
-            flex: 1;
-            margin-right: 8px;
-            word-break: break-all;
-        }
-
-        .remove-image-btn {
-            background: rgba(255, 59, 48, 0.1);
-            border: 1px solid rgba(255, 59, 48, 0.3);
-            color: #ff3b30;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
-
-        .remove-image-btn:hover {
-            background: rgba(255, 59, 48, 0.2);
-            border-color: rgba(255, 59, 48, 0.5);
-            transform: scale(1.1);
-        }
-
-        .remove-image-btn:active {
-            transform: scale(0.95);
-        }
-
-        /* Progress Bar Component */
-        .progress-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: var(--vscode-panel-background);
-            border-bottom: 1px solid var(--vscode-panel-border);
-            z-index: 1000;
-            animation: slideDown 0.3s ease-out;
-        }
-
-        @keyframes slideDown {
-            from {
-                opacity: 0;
-                transform: translateY(-100%);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .progress-overlay.closing {
-            animation: slideUp 0.3s ease-out forwards;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 1;
-                transform: translateY(0);
-            }
-            to {
-                opacity: 0;
-                transform: translateY(-100%);
-            }
-        }
-
-        .progress-container {
-            padding: 12px 20px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .progress-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .progress-icon {
-            font-size: 12px;
-            color: var(--vscode-charts-blue);
-        }
-
-        .progress-icon.completed {
-            color: var(--vscode-charts-green);
-        }
-
-        .progress-percentage {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--vscode-foreground);
-            font-family: var(--vscode-editor-font-family);
-        }
-
-        .progress-bar-wrapper {
-            height: 6px;
-            background: var(--vscode-progressBar-background);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-
-        .progress-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--vscode-charts-blue), var(--vscode-charts-purple));
-            border-radius: 3px;
-            transition: width 0.3s ease-out;
-            position: relative;
-            min-width: 0%;
-        }
-
-        .progress-bar-fill.completed {
-            background: linear-gradient(90deg, var(--vscode-charts-green), var(--vscode-charts-teal));
-        }
-
-        .progress-bar-fill::after {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(
-                90deg,
-                transparent,
-                rgba(255, 255, 255, 0.2),
-                transparent
-            );
-            animation: shimmer 2s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(100%); }
-        }
-
-        .progress-bar-fill.completed::after {
-            animation: none;
-        }
-
-        .progress-step {
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            margin-top: 6px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .progress-step-indicator {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--vscode-charts-blue);
-            flex-shrink: 0;
-        }
-
-        .progress-step-indicator.completed {
-            background: var(--vscode-charts-green);
-        }
-
-        .progress-close {
-            background: none;
-            border: none;
-            color: var(--vscode-foreground);
-            cursor: pointer;
-            font-size: 12px;
-            padding: 4px;
-            border-radius: 4px;
-            opacity: 0.6;
-            transition: all 0.2s ease;
-            margin-left: 8px;
-        }
-
-        .progress-close:hover {
-            background: var(--vscode-button-hoverBackground);
-            opacity: 1;
-        }
-
-        .progress-eta {
-            font-size: 11px;
-            color: var(--vscode-descriptionForeground);
-            margin-left: auto;
-        }
-
-        /* Adjust main container when progress is shown */
-        body.has-progress .review-container {
-            padding-top: 80px;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${sessionPayload.title || "Review Gate"}</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--vscode-editor-background);
+      color: var(--vscode-editor-foreground);
+      font-family: var(--vscode-font-family);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    button:focus-visible,
+    textarea:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+
+    .app-shell {
+      display: grid;
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .shell-header,
+    .region,
+    .status-summary,
+    .status-card,
+    .launcher-card {
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 12px;
+    }
+
+    .shell-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+    }
+
+    .header-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 600;
+    }
+
+    .header-meta,
+    .secondary-copy,
+    .detail-copy,
+    .entry-time {
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .status-badge,
+    .meta-pill,
+    .timeline-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+    }
+
+    .status-badge.online {
+      background: color-mix(in srgb, var(--vscode-testing-iconPassed) 18%, transparent);
+      color: var(--vscode-testing-iconPassed);
+    }
+
+    .status-badge.offline {
+      background: color-mix(in srgb, var(--vscode-testing-iconFailed) 18%, transparent);
+      color: var(--vscode-testing-iconFailed);
+    }
+
+    .status-badge.manual {
+      background: color-mix(in srgb, var(--vscode-charts-blue) 16%, transparent);
+      color: var(--vscode-charts-blue);
+    }
+
+    .region {
+      padding: 16px;
+    }
+
+    .region-header,
+    .request-header,
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .region-title,
+    .request-title,
+    .card-title {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .request-body,
+    .composer-layout,
+    .status-stack,
+    .launcher-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .request-summary {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+      line-height: 1.3;
+    }
+
+    .meta-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .request-message,
+    .timeline-entry,
+    .launcher-card {
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 10px;
+    }
+
+    .request-message,
+    .timeline-entry {
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.5;
+    }
+
+    .workspace-grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: minmax(260px, 1fr) minmax(320px, 1.1fr);
+    }
+
+    .tab-row,
+    .launcher-actions,
+    .composer-toolbar,
+    .composer-actions,
+    .status-actions,
+    .result-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tab-button,
+    .ghost-button,
+    .secondary-button,
+    .primary-button {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--vscode-panel-border);
+      background: var(--vscode-editor-background);
+      color: var(--vscode-editor-foreground);
+    }
+
+    .tab-button.active,
+    .primary-button {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-background);
+    }
+
+    .tab-button:hover:not(:disabled),
+    .ghost-button:hover:not(:disabled),
+    .secondary-button:hover:not(:disabled),
+    .primary-button:hover:not(:disabled) {
+      background: var(--vscode-button-hoverBackground);
+      color: var(--vscode-button-foreground);
+    }
+
+    .timeline-list,
+    .attachment-list,
+    .progress-step-list,
+    .launcher-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .timeline-header,
+    .attachment-title,
+    .launcher-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .timeline-label {
+      font-weight: 600;
+    }
+
+    .message-input {
+      width: 100%;
+      min-height: 168px;
+      resize: vertical;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+      background: var(--vscode-input-background, var(--vscode-editor-background));
+      color: var(--vscode-input-foreground, var(--vscode-editor-foreground));
+      line-height: 1.5;
+    }
+
+    .message-input.paste-highlight {
+      border-color: var(--vscode-focusBorder);
+      box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+    }
+
+    .attachment-card {
+      padding: 10px;
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 10px;
+      background: var(--vscode-editor-background);
+      display: grid;
+      gap: 8px;
+    }
+
+    .attachment-preview {
+      width: 100%;
+      max-height: 140px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--vscode-panel-border);
+    }
+
+    .status-summary,
+    .status-card {
+      padding: 14px 16px;
+    }
+
+    .status-summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .status-card {
+      display: none;
+      gap: 12px;
+    }
+
+    .status-card.visible {
+      display: grid;
+    }
+
+    .progress-bar {
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--vscode-progressBar-background);
+    }
+
+    .progress-bar > span {
+      display: block;
+      height: 100%;
+      background: var(--vscode-button-background);
+      transition: width 160ms ease-out;
+    }
+
+    .progress-step-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .progress-step-item.complete .step-state {
+      color: var(--vscode-testing-iconPassed);
+    }
+
+    .progress-step-item.active .step-state {
+      color: var(--vscode-charts-blue);
+    }
+
+    .launcher-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 12px;
+    }
+
+    .launcher-card {
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .launcher-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 900px) {
+      .workspace-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .shell-header,
+      .region-header,
+      .request-header,
+      .status-summary,
+      .progress-header {
+        flex-direction: column;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+  </style>
 </head>
 <body>
-    <!-- Progress Bar Overlay -->
-    <div class="progress-overlay" id="progressOverlay" style="display: none;">
-        <div class="progress-container">
-            <div class="progress-header">
-                <div class="progress-title">
-                    <i class="fas fa-spinner progress-icon" id="progressIcon"></i>
-                    <span id="progressTitle">Processing...</span>
-                </div>
-                <div class="progress-percentage" id="progressPercentage">0%</div>
-            </div>
-            <div class="progress-bar-wrapper">
-                <div class="progress-bar-fill" id="progressBarFill" style="width: 0%;"></div>
-            </div>
-            <div class="progress-step">
-                <div class="progress-step-indicator" id="progressStepIndicator"></div>
-                <span id="progressStep">Initializing...</span>
-                <span class="progress-eta" id="progressEta"></span>
-                <button class="progress-close" id="progressClose" title="Hide progress">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
+  <div class="app-shell">
+    <header class="shell-header">
+      <div>
+        <p class="header-meta" id="headerMeta"></p>
+        <h1 class="header-title" id="headerTitle"></h1>
+      </div>
+      <div>
+        <span class="status-badge manual" id="availabilityBadge">Loading</span>
+        <p class="header-meta" id="sessionMeta"></p>
+      </div>
+    </header>
+
+    <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+    <section class="region" id="launcherRegion" aria-labelledby="launcherHeading">
+      <div class="region-header">
+        <div>
+          <h2 class="region-title" id="launcherHeading">Start from where you left off</h2>
+          <p class="secondary-copy">Manual open keeps recent sessions, templates, and keyboard help visible.</p>
         </div>
+        <div class="launcher-actions">
+          <button class="primary-button" type="button" id="startReviewButton">Start new review</button>
+          <button class="secondary-button" type="button" id="resumeReviewButton">Resume last request</button>
+          <button class="ghost-button" type="button" id="openCheckpointsButton">View checkpoints</button>
+        </div>
+      </div>
+      <div class="launcher-grid">
+        <article class="launcher-card">
+          <h3 class="card-title">Recent sessions</h3>
+          <ul class="launcher-list" id="recentSessionsList"></ul>
+        </article>
+        <article class="launcher-card">
+          <h3 class="card-title">Saved templates</h3>
+          <ul class="launcher-list" id="savedTemplatesList"></ul>
+        </article>
+        <article class="launcher-card">
+          <h3 class="card-title">Keyboard help</h3>
+          <p class="secondary-copy">Cmd/Ctrl+Enter sends. Enter adds a newline. Tab moves between regions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="region" id="requestRegion" aria-labelledby="requestHeading">
+      <div class="request-header">
+        <div>
+          <p class="header-meta" id="requestEyebrow"></p>
+          <h2 class="request-title" id="requestHeading">Request summary</h2>
+        </div>
+        <button class="ghost-button" type="button" id="toggleSummaryButton" aria-expanded="true">Collapse summary</button>
+      </div>
+      <div class="request-body" id="requestBody">
+        <p class="request-summary" id="requestSummary"></p>
+        <div class="meta-list" id="requestMeta"></div>
+        <div class="request-message" id="requestMessage"></div>
+        <div class="request-message" id="successLooksLike"></div>
+      </div>
+    </section>
+
+    <div class="workspace-grid" id="workspaceRegion">
+      <section class="region" aria-labelledby="historyHeading">
+        <div class="region-header">
+          <div>
+            <h2 class="region-title" id="historyHeading">Session history</h2>
+            <p class="secondary-copy">Switch between request, transcript, checkpoints, and activity.</p>
+          </div>
+          <div class="tab-row" id="tabRow" role="tablist" aria-label="History views"></div>
+        </div>
+        <div class="timeline-list" id="historyPanel"></div>
+      </section>
+
+      <section class="region" aria-labelledby="composerHeading">
+        <div class="region-header">
+          <div>
+            <h2 class="region-title" id="composerHeading">Response draft</h2>
+            <p class="secondary-copy" id="composerHelper">Keyboard-first compose area with attachments and optional voice input.</p>
+          </div>
+          <span class="timeline-pill" id="saveStateLabel">Draft not saved</span>
+        </div>
+        <div class="composer-layout">
+          <label for="messageInput">Response</label>
+          <textarea id="messageInput" class="message-input" rows="8" placeholder="Write a focused response."></textarea>
+          <div class="composer-toolbar">
+            <button class="secondary-button" type="button" id="addImageButton">Add image</button>
+            <button class="secondary-button" type="button" id="voiceButton">Start voice</button>
+          </div>
+          <div class="secondary-copy" id="attachmentSummary">No attachments</div>
+          <div class="attachment-list" id="attachmentList"></div>
+          <div class="composer-actions">
+            <button class="ghost-button" type="button" id="saveDraftButton">Save draft</button>
+            <button class="ghost-button" type="button" id="discardDraftButton">Discard draft</button>
+            <button class="primary-button" type="button" id="sendButton">Send response</button>
+          </div>
+        </div>
+      </section>
     </div>
 
-    <div class="review-container">
-        <div class="review-header">
-            <div class="review-title">${title}</div>
-            <div class="status-indicator" id="statusIndicator"></div>
-            <div class="mcp-status" id="mcpStatus">Checking MCP...</div>
-            <div class="review-author">by Lakshman Turlapati</div>
+    <section class="status-stack" aria-labelledby="statusHeading">
+      <div class="status-summary">
+        <div>
+          <h2 class="region-title" id="statusHeading">Delivery status</h2>
+          <p class="secondary-copy" id="statusSummaryText"></p>
         </div>
+        <div class="status-actions" id="statusActionGroup"></div>
+      </div>
 
-        <div class="messages-container" id="messages">
-            <!-- Messages will be added here -->
+      <article class="status-card" id="progressCard" aria-live="polite">
+        <div class="progress-header">
+          <div>
+            <h3 class="card-title" id="progressTitle">Delivery progress</h3>
+            <p class="secondary-copy" id="progressSubtitle"></p>
+          </div>
+          <button class="ghost-button" type="button" id="toggleProgressDetailsButton" aria-expanded="true">Hide details</button>
         </div>
+        <div class="progress-bar" aria-hidden="true"><span id="progressFill" style="width: 0%;"></span></div>
+        <div class="detail-copy" id="progressMeta"></div>
+        <div class="progress-step-list" id="progressSteps"></div>
+      </article>
 
-        <div class="typing-indicator" id="typingIndicator">
-            <span>Processing review</span>
-            <div class="typing-dots">
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-                <div class="typing-dot"></div>
-            </div>
+      <article class="status-card" id="resultCard">
+        <div>
+          <h3 class="card-title" id="resultTitle"></h3>
+          <p class="secondary-copy" id="resultSubtitle"></p>
         </div>
+        <div class="detail-copy" id="resultDetails"></div>
+        <div class="result-actions" id="resultActions"></div>
+      </article>
+    </section>
+  </div>
 
-        <div class="input-container" id="inputContainer">
-            <div class="input-wrapper">
-                <i id="micIcon" class="fas fa-microphone mic-icon active" title="Click to speak"></i>
-                <textarea id="messageInput" class="message-input" placeholder="${
-                  mcpIntegration
-                    ? "Cursor Agent is waiting for your response..."
-                    : "Type your review or feedback..."
-                }" rows="1"></textarea>
-                <button id="attachButton" class="attach-button" title="Upload image">
-                    <i class="fas fa-image"></i>
-                </button>
-            </div>
-            <button id="sendButton" class="send-button" title="Send ${
-              mcpIntegration ? "response to Agent" : "review"
-            }">
-                <i class="fas fa-arrow-up"></i>
-            </button>
-        </div>
-    </div>
+  <script>
+    const vscode = acquireVsCodeApi();
+    const initialSession = ${serializedSession};
+    const defaultTemplates = ["Code review request", "Architecture sign-off", "Release checklist"];
+    const defaultProgressSteps = [
+      "Validate response payload",
+      "Write response file",
+      "Await extension acknowledgement",
+      "Return result to MCP client",
+    ];
 
-    <script>
-        const vscode = acquireVsCodeApi();
+    const dom = {
+      liveRegion: document.getElementById("liveRegion"),
+      headerTitle: document.getElementById("headerTitle"),
+      headerMeta: document.getElementById("headerMeta"),
+      availabilityBadge: document.getElementById("availabilityBadge"),
+      sessionMeta: document.getElementById("sessionMeta"),
+      launcherRegion: document.getElementById("launcherRegion"),
+      recentSessionsList: document.getElementById("recentSessionsList"),
+      savedTemplatesList: document.getElementById("savedTemplatesList"),
+      requestRegion: document.getElementById("requestRegion"),
+      requestEyebrow: document.getElementById("requestEyebrow"),
+      requestSummary: document.getElementById("requestSummary"),
+      requestMeta: document.getElementById("requestMeta"),
+      requestMessage: document.getElementById("requestMessage"),
+      successLooksLike: document.getElementById("successLooksLike"),
+      requestBody: document.getElementById("requestBody"),
+      toggleSummaryButton: document.getElementById("toggleSummaryButton"),
+      workspaceRegion: document.getElementById("workspaceRegion"),
+      tabRow: document.getElementById("tabRow"),
+      historyPanel: document.getElementById("historyPanel"),
+      saveStateLabel: document.getElementById("saveStateLabel"),
+      composerHelper: document.getElementById("composerHelper"),
+      messageInput: document.getElementById("messageInput"),
+      addImageButton: document.getElementById("addImageButton"),
+      voiceButton: document.getElementById("voiceButton"),
+      attachmentSummary: document.getElementById("attachmentSummary"),
+      attachmentList: document.getElementById("attachmentList"),
+      saveDraftButton: document.getElementById("saveDraftButton"),
+      discardDraftButton: document.getElementById("discardDraftButton"),
+      sendButton: document.getElementById("sendButton"),
+      statusSummaryText: document.getElementById("statusSummaryText"),
+      statusActionGroup: document.getElementById("statusActionGroup"),
+      progressCard: document.getElementById("progressCard"),
+      progressTitle: document.getElementById("progressTitle"),
+      progressSubtitle: document.getElementById("progressSubtitle"),
+      progressFill: document.getElementById("progressFill"),
+      progressMeta: document.getElementById("progressMeta"),
+      progressSteps: document.getElementById("progressSteps"),
+      toggleProgressDetailsButton: document.getElementById("toggleProgressDetailsButton"),
+      resultCard: document.getElementById("resultCard"),
+      resultTitle: document.getElementById("resultTitle"),
+      resultSubtitle: document.getElementById("resultSubtitle"),
+      resultDetails: document.getElementById("resultDetails"),
+      resultActions: document.getElementById("resultActions"),
+      startReviewButton: document.getElementById("startReviewButton"),
+      resumeReviewButton: document.getElementById("resumeReviewButton"),
+      openCheckpointsButton: document.getElementById("openCheckpointsButton"),
+    };
 
-        const messagesContainer = document.getElementById('messages');
-        const messageInput = document.getElementById('messageInput');
-        const sendButton = document.getElementById('sendButton');
-        const attachButton = document.getElementById('attachButton');
-        const micIcon = document.getElementById('micIcon');
-        const typingIndicator = document.getElementById('typingIndicator');
-        const statusIndicator = document.getElementById('statusIndicator');
-        const mcpStatus = document.getElementById('mcpStatus');
-        const inputContainer = document.getElementById('inputContainer');
+    const appState = {
+      session: null,
+      currentView: "home_idle",
+      activeTab: "request",
+      draftText: "",
+      attachments: [],
+      transcript: [],
+      activity: [],
+      checkpoints: [],
+      recentSessions: [],
+      savedTemplates: defaultTemplates.slice(),
+      mcpActive: true,
+      progress: null,
+      progressExpanded: true,
+      success: null,
+      recovery: null,
+      lastSavedAt: null,
+      summaryCollapsed: false,
+      isRecording: false,
+      lastPasteTime: 0,
+      dragCounter: 0,
+    };
 
-        // Progress bar elements
-        const progressOverlay = document.getElementById('progressOverlay');
-        const progressIcon = document.getElementById('progressIcon');
-        const progressTitle = document.getElementById('progressTitle');
-        const progressPercentage = document.getElementById('progressPercentage');
-        const progressBarFill = document.getElementById('progressBarFill');
-        const progressStep = document.getElementById('progressStep');
-        const progressStepIndicator = document.getElementById('progressStepIndicator');
-        const progressEta = document.getElementById('progressEta');
-        const progressClose = document.getElementById('progressClose');
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
 
-        let messageCount = 0;
-        let mcpActive = true; // Default to true for better UX
-        let mcpIntegration = ${mcpIntegration};
-        let attachedImages = []; // Store uploaded images
-        let isRecording = false;
-        let mediaRecorder = null;
+    function formatTime(value) {
+      if (!value) {
+        return "Now";
+      }
+      const date = new Date(value);
+      return Number.isNaN(date.getTime())
+        ? "Now"
+        : date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
 
-        function updateMcpStatus(active) {
-            mcpActive = active;
+    function humanCount(value) {
+      if (Array.isArray(value)) {
+        return value.length;
+      }
+      if (typeof value === "number") {
+        return value;
+      }
+      if (typeof value === "string" && value.trim()) {
+        return 1;
+      }
+      return 0;
+    }
 
-            if (active) {
-                statusIndicator.classList.add('active');
-                mcpStatus.textContent = 'MCP Active';
-                inputContainer.classList.remove('disabled');
-                messageInput.disabled = false;
-                sendButton.disabled = false;
-                attachButton.disabled = false;
-                messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...';
-            } else {
-                statusIndicator.classList.remove('active');
-                mcpStatus.textContent = 'MCP Inactive';
-                inputContainer.classList.add('disabled');
-                messageInput.disabled = true;
-                sendButton.disabled = true;
-                attachButton.disabled = true;
-                messageInput.placeholder = 'MCP server is not active. Please start the server to enable input.';
-            }
+    function cloneSession(session) {
+      return Object.assign({}, session || {});
+    }
+
+    function deriveRequestMeta(session) {
+      const toolData = session.toolData || {};
+      return {
+        requestTitle:
+          toolData.requestTitle ||
+          toolData.title ||
+          session.title ||
+          (session.mcpIntegration ? "Incoming review request" : "New review"),
+        source: toolData.tool || (session.mcpIntegration ? "review_gate_chat" : "manual_open"),
+        urgency: toolData.urgency || toolData.priority || (session.mcpIntegration ? "High" : "Ready"),
+        requestedBy:
+          toolData.requestedBy ||
+          toolData.requested_by ||
+          toolData.source ||
+          (session.mcpIntegration ? "review_gate" : "manual"),
+        files: humanCount(toolData.files || toolData.file_paths || toolData.paths || toolData.changed_files),
+        context: humanCount(toolData.context || toolData.context_files || toolData.contextFiles),
+        successLooksLike:
+          toolData.successLooksLike ||
+          toolData.success_looks_like ||
+          toolData.expectedOutcome ||
+          toolData.goal ||
+          "Respond with the next action, risk, or recommendation the requester needs.",
+      };
+    }
+
+    function createTranscriptEntry(kind, label, text, timestamp) {
+      return {
+        id: "entry-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+        kind,
+        label,
+        text,
+        timestamp: timestamp || new Date().toISOString(),
+      };
+    }
+
+    function pushActivity(label, text, timestamp) {
+      appState.activity.unshift(createTranscriptEntry("activity", label, text, timestamp));
+    }
+
+    function announce(text) {
+      dom.liveRegion.textContent = text;
+    }
+
+    function setDraftPlaceholder() {
+      const base = appState.session?.mcpIntegration
+        ? "Cursor Agent is waiting for your response."
+        : "Write a focused review response.";
+      const suffix = appState.attachments.length
+        ? " " + appState.attachments.length + " attachment(s) ready."
+        : "";
+      dom.messageInput.placeholder = base + suffix;
+    }
+
+    function resetForSession(session) {
+      const nextSession = cloneSession(session);
+      const sessionChanged =
+        !appState.session ||
+        appState.session.triggerId !== nextSession.triggerId ||
+        appState.session.mcpIntegration !== nextSession.mcpIntegration ||
+        appState.session.message !== nextSession.message;
+
+      appState.session = nextSession;
+      appState.currentView = nextSession.mcpIntegration ? "drafting" : "home_idle";
+      appState.activeTab = nextSession.mcpIntegration ? "request" : "history";
+      appState.summaryCollapsed = false;
+      appState.progress = null;
+      appState.progressExpanded = true;
+      appState.success = null;
+      appState.recovery = null;
+
+      if (sessionChanged) {
+        appState.draftText = "";
+        appState.attachments = [];
+        appState.lastSavedAt = null;
+        appState.checkpoints = [];
+        appState.transcript = [];
+        appState.activity = [];
+
+        if (nextSession.message) {
+          appState.transcript.push(
+            createTranscriptEntry(
+              nextSession.mcpIntegration ? "request" : "history",
+              nextSession.mcpIntegration ? "Agent request" : "Review launcher",
+              nextSession.message,
+              nextSession.openedAt
+            )
+          );
         }
 
-        // Progress Bar Functions
-        let progressState = {
-            visible: false,
-            percentage: 0,
-            title: 'Processing...',
-            step: 'Initializing...',
-            status: 'active', // 'active' or 'completed'
-            startTime: null,
-            lastUpdateTime: null
-        };
+        pushActivity(
+          "Session opened",
+          nextSession.mcpIntegration
+            ? "Structured request received from Cursor MCP."
+            : "Manual launcher is ready for a new review.",
+          nextSession.openedAt
+        );
+      }
 
-        function showProgress(data) {
-            const {
-                title = 'Processing...',
-                percentage = 0,
-                step = 'Starting...',
-                status = 'active'
-            } = data;
+      announce(
+        nextSession.mcpIntegration
+          ? deriveRequestMeta(nextSession).requestTitle + ", " + deriveRequestMeta(nextSession).urgency + " priority."
+          : "Review Gate launcher ready."
+      );
+      render();
+    }
 
-            // Update state
-            progressState.title = title;
-            progressState.percentage = Math.min(100, Math.max(0, percentage));
-            progressState.step = step;
-            progressState.status = status;
+    function addAttachment(imageData) {
+      appState.attachments.push(
+        Object.assign({}, imageData, {
+          id: imageData.id || "img-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+        })
+      );
+      pushActivity("Attachment added", imageData.fileName || "Image attached.");
+      announce((imageData.fileName || "Image") + " attached.");
+      render();
+    }
 
-            // Set start time if this is the first update
-            if (!progressState.startTime) {
-                progressState.startTime = Date.now();
-            }
-            progressState.lastUpdateTime = Date.now();
+    function removeAttachment(attachmentId) {
+      const removed = appState.attachments.find((attachment) => attachment.id === attachmentId);
+      appState.attachments = appState.attachments.filter((attachment) => attachment.id !== attachmentId);
+      if (removed) {
+        vscode.postMessage({ command: "logImageRemoved", imageId: attachmentId });
+        pushActivity("Attachment removed", removed.fileName || "Image removed.");
+      }
+      render();
+    }
 
-            // Show overlay
-            progressOverlay.style.display = 'block';
-            document.body.classList.add('has-progress');
-            progressState.visible = true;
+    function saveDraft() {
+      appState.draftText = dom.messageInput.value;
+      appState.lastSavedAt = new Date().toISOString();
+      appState.checkpoints.unshift({
+        id: "checkpoint-" + Date.now(),
+        title: "Draft saved",
+        detail:
+          (appState.draftText ? appState.draftText.slice(0, 72) : "Draft with no text") +
+          (appState.draftText.length > 72 ? "…" : ""),
+        timestamp: appState.lastSavedAt,
+      });
+      pushActivity("Draft saved", "Draft saved at " + formatTime(appState.lastSavedAt) + ".");
+      announce("Draft saved.");
+      render();
+    }
 
-            // Update UI
-            updateProgressUI();
+    function discardDraft() {
+      appState.draftText = "";
+      appState.attachments = [];
+      appState.success = null;
+      appState.recovery = null;
+      dom.messageInput.value = "";
+      pushActivity("Draft cleared", "Draft and attachments were cleared.");
+      announce("Draft cleared.");
+      render();
+      dom.messageInput.focus();
+    }
 
-            // Auto-hide when complete
-            if (status === 'completed' && percentage >= 100) {
-                setTimeout(() => {
-                    hideProgress();
-                }, 3000);
-            }
+    function applyProgress(progressData) {
+      appState.progress = Object.assign(
+        {
+          title: "Delivery progress",
+          percentage: 0,
+          step: "Waiting for update",
+          status: "active",
+          updatedAt: new Date().toISOString(),
+        },
+        progressData || {}
+      );
+      appState.progress.updatedAt = new Date().toISOString();
+      appState.progressExpanded = appState.progress.status !== "completed";
+      pushActivity(
+        "Progress update",
+        appState.progress.step + " (" + Math.round(appState.progress.percentage) + "%)"
+      );
+      announce(appState.progress.step);
+      render();
+    }
+
+    function applySuccess(payload) {
+      const sentAt = payload?.sentAt || new Date().toISOString();
+      appState.success = {
+        title: "Response sent",
+        subtitle: payload?.summary || "The response was delivered through Review Gate.",
+        details: {
+          "Session ID": payload?.sessionId || "Unavailable",
+          Destination: payload?.destination || "Returned to MCP client",
+          "Sent at": formatTime(sentAt),
+          Attachments: String(payload?.attachmentCount || 0),
+        },
+        actions: [
+          { id: "copy-session", label: "Copy session ID", value: payload?.sessionId || "" },
+          { id: "open-history", label: "Open transcript" },
+          { id: "new-review", label: "Start follow-up" },
+        ],
+      };
+      appState.recovery = null;
+      appState.progress = {
+        title: "Delivery progress",
+        percentage: 100,
+        step: "Return result to MCP client",
+        status: "completed",
+        updatedAt: sentAt,
+      };
+      appState.recentSessions.unshift({
+        title: deriveRequestMeta(appState.session).requestTitle,
+        subtitle: payload?.destination || "Response sent",
+        timestamp: sentAt,
+      });
+      appState.recentSessions = appState.recentSessions.slice(0, 5);
+      appState.checkpoints.unshift({
+        id: "sent-" + Date.now(),
+        title: "Response sent",
+        detail: payload?.sessionId || "Session complete",
+        timestamp: sentAt,
+      });
+      appState.draftText = "";
+      appState.attachments = [];
+      dom.messageInput.value = "";
+      pushActivity("Response sent", payload?.destination || "Returned to MCP client", sentAt);
+      announce("Response sent.");
+      render();
+    }
+
+    function applyRecovery(problem, cause, fix) {
+      appState.recovery = {
+        title: "Recovery",
+        subtitle: problem,
+        details: {
+          Problem: problem,
+          Cause: cause,
+          Fix: fix,
+        },
+        actions: [{ id: "focus-draft", label: "Return to draft" }],
+      };
+      appState.success = null;
+      announce(problem);
+      render();
+    }
+
+    function appendTranscriptMessage(text, type) {
+      if (!text) {
+        return;
+      }
+      const labels = {
+        assistant: "Agent",
+        system: "System",
+        user: "You",
+      };
+      appState.transcript.push(createTranscriptEntry("history", labels[type] || "System", text));
+      pushActivity("Transcript updated", "New " + (labels[type] || "system").toLowerCase() + " message received.");
+      render();
+    }
+
+    function renderHeader() {
+      const meta = deriveRequestMeta(appState.session || {});
+      dom.headerTitle.textContent = appState.session?.title || "Review Gate";
+      dom.headerMeta.textContent = appState.session?.mcpIntegration
+        ? "Structured request, transcript, composer, and delivery regions."
+        : "Launcher workspace for manual reviews and follow-up drafts.";
+      dom.sessionMeta.textContent =
+        "Session " + (appState.session?.triggerId || "manual") + " · " + meta.requestTitle;
+      dom.availabilityBadge.textContent = appState.session?.mcpIntegration
+        ? appState.mcpActive
+          ? "MCP ready"
+          : "MCP inactive"
+        : "Manual review";
+      dom.availabilityBadge.className =
+        "status-badge " +
+        (appState.session?.mcpIntegration ? (appState.mcpActive ? "online" : "offline") : "manual");
+    }
+
+    function renderLauncher() {
+      const visible = appState.currentView === "home_idle";
+      dom.launcherRegion.classList.toggle("hidden", !visible);
+      dom.recentSessionsList.innerHTML = appState.recentSessions.length
+        ? appState.recentSessions
+            .map(
+              (session) =>
+                "<li><span>" +
+                escapeHtml(session.title) +
+                '</span><span class="entry-time">' +
+                escapeHtml(formatTime(session.timestamp)) +
+                "</span></li>"
+            )
+            .join("")
+        : '<li><span class="secondary-copy">No recent sessions yet.</span></li>';
+      dom.savedTemplatesList.innerHTML = appState.savedTemplates
+        .map(
+          (template) =>
+            "<li><span>" + escapeHtml(template) + '</span><span class="entry-time">Ready</span></li>'
+        )
+        .join("");
+      dom.resumeReviewButton.disabled = !appState.recentSessions.length;
+      dom.openCheckpointsButton.disabled = !appState.checkpoints.length;
+    }
+
+    function renderRequestRegion() {
+      const meta = deriveRequestMeta(appState.session || {});
+      const visible = appState.currentView !== "home_idle";
+      dom.requestRegion.classList.toggle("hidden", !visible);
+      dom.requestEyebrow.textContent = appState.session?.mcpIntegration ? "Structured request" : "Manual review";
+      dom.requestSummary.textContent = meta.requestTitle;
+      dom.requestMeta.innerHTML = [
+        "Agent: " + meta.source,
+        "Urgency: " + meta.urgency,
+        "Files: " + meta.files,
+        "Context: " + meta.context,
+        "Requested by: " + meta.requestedBy,
+      ]
+        .map((item) => '<span class="meta-pill">' + escapeHtml(item) + "</span>")
+        .join("");
+      dom.requestMessage.textContent =
+        appState.session?.message || "Use the draft area to prepare the next review response or note.";
+      dom.successLooksLike.innerHTML =
+        "<strong>Success looks like:</strong> " + escapeHtml(meta.successLooksLike);
+      dom.requestBody.classList.toggle("hidden", appState.summaryCollapsed);
+      dom.toggleSummaryButton.textContent = appState.summaryCollapsed ? "Expand summary" : "Collapse summary";
+      dom.toggleSummaryButton.setAttribute("aria-expanded", String(!appState.summaryCollapsed));
+    }
+
+    function renderTabs() {
+      const tabs = [
+        { id: "request", label: "Request" },
+        { id: "history", label: "History" },
+        { id: "checkpoints", label: "Checkpoints" },
+        { id: "activity", label: "Activity" },
+      ];
+      dom.tabRow.innerHTML = tabs
+        .map((tab) => {
+          const selected = tab.id === appState.activeTab;
+          return (
+            '<button class="tab-button' +
+            (selected ? " active" : "") +
+            '" role="tab" type="button" data-tab="' +
+            tab.id +
+            '" aria-selected="' +
+            String(selected) +
+            '">' +
+            escapeHtml(tab.label) +
+            "</button>"
+          );
+        })
+        .join("");
+    }
+
+    function renderHistoryPanel() {
+      if (appState.activeTab === "request") {
+        const meta = deriveRequestMeta(appState.session || {});
+        dom.historyPanel.innerHTML =
+          '<div class="timeline-entry"><div class="timeline-header"><span class="timeline-label">Request context</span><span class="entry-time">' +
+          escapeHtml(formatTime(appState.session?.openedAt)) +
+          "</span></div><div>" +
+          escapeHtml(appState.session?.message || "No request context available.") +
+          '</div><div class="meta-list"><span class="meta-pill">Agent: ' +
+          escapeHtml(meta.source) +
+          '</span><span class="meta-pill">Urgency: ' +
+          escapeHtml(meta.urgency) +
+          '</span><span class="meta-pill">Requested by: ' +
+          escapeHtml(meta.requestedBy) +
+          "</span></div></div>";
+        return;
+      }
+
+      const items =
+        appState.activeTab === "history"
+          ? appState.transcript
+          : appState.activeTab === "checkpoints"
+            ? appState.checkpoints.map((checkpoint) =>
+                createTranscriptEntry("checkpoint", checkpoint.title, checkpoint.detail, checkpoint.timestamp)
+              )
+            : appState.activity;
+
+      if (!items.length) {
+        dom.historyPanel.innerHTML = '<div class="secondary-copy">Nothing to show yet.</div>';
+        return;
+      }
+
+      dom.historyPanel.innerHTML = items
+        .map(
+          (entry) =>
+            '<div class="timeline-entry"><div class="timeline-header"><span class="timeline-label">' +
+            escapeHtml(entry.label) +
+            '</span><span class="entry-time">' +
+            escapeHtml(formatTime(entry.timestamp)) +
+            "</span></div><div>" +
+            escapeHtml(entry.text) +
+            "</div></div>"
+        )
+        .join("");
+    }
+
+    function renderAttachments() {
+      if (!appState.attachments.length) {
+        dom.attachmentSummary.textContent = "No attachments";
+        dom.attachmentList.innerHTML = "";
+        return;
+      }
+
+      dom.attachmentSummary.textContent = appState.attachments.length + " attachment(s) ready";
+      dom.attachmentList.innerHTML = appState.attachments
+        .map(
+          (attachment) =>
+            '<article class="attachment-card"><div class="attachment-title"><span>' +
+            escapeHtml(attachment.fileName || "Image attachment") +
+            '</span><button class="ghost-button" type="button" data-remove-attachment="' +
+            escapeHtml(attachment.id) +
+            '" aria-label="Remove ' +
+            escapeHtml(attachment.fileName || "attachment") +
+            '">Remove</button></div>' +
+            (attachment.dataUrl
+              ? '<img class="attachment-preview" src="' +
+                escapeHtml(attachment.dataUrl) +
+                '" alt="' +
+                escapeHtml(attachment.fileName || "Attached image") +
+                '">'
+              : "") +
+            '<div class="secondary-copy">' +
+            escapeHtml(((attachment.size || 0) / 1024).toFixed(1) + " KB") +
+            "</div></article>"
+        )
+        .join("");
+    }
+
+    function renderComposer() {
+      const visible = appState.currentView !== "home_idle";
+      dom.workspaceRegion.classList.toggle("hidden", !visible);
+      const disabled = Boolean(appState.session?.mcpIntegration && !appState.mcpActive);
+      dom.messageInput.disabled = disabled;
+      dom.addImageButton.disabled = disabled;
+      dom.voiceButton.disabled = disabled;
+      dom.sendButton.disabled = disabled;
+      dom.messageInput.value = appState.draftText;
+      dom.saveStateLabel.textContent = appState.lastSavedAt
+        ? "Saved " + formatTime(appState.lastSavedAt)
+        : "Draft not saved";
+      dom.composerHelper.textContent = appState.session?.mcpIntegration
+        ? "Cmd/Ctrl+Enter sends. Enter adds a newline. Attachments stay in the draft tray."
+        : "Cmd/Ctrl+Enter sends. Enter adds a newline. Manual reviews stay local until sent.";
+      dom.voiceButton.textContent = appState.isRecording ? "Stop voice" : "Start voice";
+      setDraftPlaceholder();
+      renderAttachments();
+    }
+
+    function renderStatusSummary() {
+      const meta = deriveRequestMeta(appState.session || {});
+      dom.statusSummaryText.textContent =
+        appState.success?.subtitle ||
+        appState.recovery?.subtitle ||
+        appState.progress?.step ||
+        (appState.currentView === "home_idle"
+          ? "Ready to start a new review."
+          : appState.session?.mcpIntegration && !appState.mcpActive
+            ? "Extension disconnected. Draft is preserved until the transport returns."
+            : "Waiting for your response. Keyboard-ready and attachment-aware.");
+      dom.statusActionGroup.innerHTML =
+        '<span class="timeline-pill">Session ' +
+        escapeHtml(appState.session?.triggerId || "manual") +
+        '</span><span class="timeline-pill">' +
+        escapeHtml(meta.requestTitle) +
+        "</span>";
+    }
+
+    function renderProgressCard() {
+      if (!appState.progress) {
+        dom.progressCard.classList.remove("visible");
+        return;
+      }
+
+      const percentage = Math.round(appState.progress.percentage || 0);
+      dom.progressCard.classList.add("visible");
+      dom.progressTitle.textContent = appState.progress.title || "Delivery progress";
+      dom.progressSubtitle.textContent = "Last update " + formatTime(appState.progress.updatedAt);
+      dom.progressFill.style.width = percentage + "%";
+      dom.progressMeta.textContent =
+        percentage + "% complete · " + (appState.progress.status === "completed" ? "Complete" : "In progress");
+      dom.toggleProgressDetailsButton.textContent = appState.progressExpanded ? "Hide details" : "Show details";
+      dom.toggleProgressDetailsButton.setAttribute("aria-expanded", String(appState.progressExpanded));
+      dom.progressSteps.innerHTML = appState.progressExpanded
+        ? defaultProgressSteps
+            .map((step, index) => {
+              const progressIndex = Math.min(
+                defaultProgressSteps.length - 1,
+                Math.floor((percentage / 100) * defaultProgressSteps.length)
+              );
+              const isComplete = percentage >= 100 ? true : index < progressIndex;
+              const isActive = !isComplete && step === appState.progress.step;
+              return (
+                '<div class="progress-step-item ' +
+                (isComplete ? "complete" : isActive ? "active" : "") +
+                '"><span class="step-label">' +
+                escapeHtml(step) +
+                '</span><span class="step-state">' +
+                escapeHtml(isComplete ? "Complete" : isActive ? "Active" : "Pending") +
+                "</span></div>"
+              );
+            })
+            .join("")
+        : "";
+    }
+
+    function renderResultCard() {
+      const card = appState.recovery || appState.success;
+      if (!card) {
+        dom.resultCard.classList.remove("visible");
+        return;
+      }
+
+      dom.resultCard.classList.add("visible");
+      dom.resultTitle.textContent = card.title;
+      dom.resultSubtitle.textContent = card.subtitle || "";
+      dom.resultDetails.innerHTML = Object.keys(card.details || {})
+        .map((key) => "<div><strong>" + escapeHtml(key) + ":</strong> " + escapeHtml(card.details[key]) + "</div>")
+        .join("");
+      dom.resultActions.innerHTML = (card.actions || [])
+        .map(
+          (action) =>
+            '<button class="' +
+            (action.id === "new-review" ? "primary-button" : "ghost-button") +
+            '" type="button" data-result-action="' +
+            escapeHtml(action.id) +
+            '" data-result-value="' +
+            escapeHtml(action.value || "") +
+            '">' +
+            escapeHtml(action.label) +
+            "</button>"
+        )
+        .join("");
+    }
+
+    function render() {
+      renderHeader();
+      renderLauncher();
+      renderRequestRegion();
+      renderTabs();
+      renderHistoryPanel();
+      renderComposer();
+      renderStatusSummary();
+      renderProgressCard();
+      renderResultCard();
+    }
+
+    function sendMessage() {
+      const text = dom.messageInput.value.trim();
+      if (!text && appState.attachments.length === 0) {
+        applyRecovery(
+          "Nothing to send",
+          "The response draft is empty.",
+          "Write a response or attach an image, then try again."
+        );
+        return;
+      }
+
+      appState.draftText = text;
+      appState.success = null;
+      appState.recovery = null;
+      appState.progress = {
+        title: "Delivery progress",
+        percentage: 12,
+        step: "Validate response payload",
+        status: "active",
+        updatedAt: new Date().toISOString(),
+      };
+      appState.transcript.push(
+        createTranscriptEntry(
+          "history",
+          "You",
+          text + (appState.attachments.length ? "\\n\\n[" + appState.attachments.length + " attachment(s)]" : "")
+        )
+      );
+      pushActivity("Response submitted", "Payload prepared for extension delivery.");
+      announce("Sending response.");
+      render();
+
+      vscode.postMessage({
+        command: "send",
+        text,
+        attachments: appState.attachments,
+        timestamp: new Date().toISOString(),
+        mcpIntegration: appState.session?.mcpIntegration,
+      });
+    }
+
+    function ensureDrafting() {
+      if (appState.currentView === "home_idle") {
+        appState.currentView = "drafting";
+        appState.activeTab = "history";
+        pushActivity("Draft opened", "Manual compose state is ready.");
+        render();
+      }
+      dom.messageInput.focus();
+    }
+
+    function handleResultAction(actionId, actionValue) {
+      switch (actionId) {
+        case "focus-draft":
+          dom.messageInput.focus();
+          break;
+        case "copy-session":
+          if (actionValue) {
+            navigator.clipboard?.writeText(actionValue);
+            announce("Session ID copied.");
+          }
+          break;
+        case "open-history":
+          appState.activeTab = "history";
+          render();
+          break;
+        case "new-review":
+          if (appState.session?.mcpIntegration) {
+            appState.success = null;
+            appState.progress = null;
+            render();
+          } else {
+            appState.currentView = "home_idle";
+            discardDraft();
+          }
+          break;
+        default:
+          break;
+      }
+    }
+
+    function processClipboardImage(file, source) {
+      const reader = new FileReader();
+
+      reader.onload = (event) => {
+        const dataUrl = event.target.result;
+        const base64Data = dataUrl.split(",")[1];
+        const extension = (file.type.split("/")[1] || "png").replace(/[^a-z0-9]/gi, "");
+        const fileName =
+          (source === "drop" ? "dropped" : "pasted") +
+          "-image-" +
+          new Date().toISOString().replace(/[:.]/g, "-") +
+          "." +
+          extension;
+
+        addAttachment({
+          id: "img-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+          fileName,
+          filePath: source,
+          mimeType: file.type,
+          base64Data,
+          dataUrl,
+          size: file.size,
+          source,
+        });
+
+        vscode.postMessage({
+          command: source === "drop" ? "logDragDropImage" : "logPastedImage",
+          fileName,
+          size: file.size,
+          mimeType: file.type,
+        });
+      };
+
+      reader.onerror = () => {
+        applyRecovery(
+          "Image processing failed.",
+          "The selected image could not be read in the webview.",
+          "Try the upload button again or attach a different image."
+        );
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    function handlePaste(event) {
+      const now = Date.now();
+      if (now - appState.lastPasteTime < 500) {
+        return;
+      }
+
+      const clipboardData = event.clipboardData || window.clipboardData;
+      if (!clipboardData || !clipboardData.items) {
+        return;
+      }
+
+      for (let index = 0; index < clipboardData.items.length; index += 1) {
+        const item = clipboardData.items[index];
+        if (item.type.indexOf("image") !== -1) {
+          event.preventDefault();
+          appState.lastPasteTime = now;
+          const file = item.getAsFile();
+          if (file) {
+            processClipboardImage(file, "paste");
+          }
+          break;
         }
+      }
+    }
 
-        function updateProgressUI() {
-            // Update title
-            progressTitle.textContent = progressState.title;
+    dom.startReviewButton.addEventListener("click", () => {
+      ensureDrafting();
+    });
 
-            // Update percentage
-            const pct = Math.round(progressState.percentage);
-            progressPercentage.textContent = pct + '%';
-            progressBarFill.style.width = pct + '%';
+    dom.resumeReviewButton.addEventListener("click", () => {
+      ensureDrafting();
+      appState.activeTab = "history";
+      render();
+    });
 
-            // Update step
-            progressStep.textContent = progressState.step;
+    dom.openCheckpointsButton.addEventListener("click", () => {
+      ensureDrafting();
+      appState.activeTab = "checkpoints";
+      render();
+    });
 
-            // Update icon based on status
-            if (progressState.status === 'completed' || progressState.percentage >= 100) {
-                progressIcon.className = 'fas fa-check-circle progress-icon completed';
-                progressStepIndicator.classList.add('completed');
-                progressBarFill.classList.add('completed');
-            } else {
-                progressIcon.className = 'fas fa-spinner progress-icon';
-                progressStepIndicator.classList.remove('completed');
-                progressBarFill.classList.remove('completed');
-            }
+    dom.toggleSummaryButton.addEventListener("click", () => {
+      appState.summaryCollapsed = !appState.summaryCollapsed;
+      renderRequestRegion();
+    });
 
-            // Calculate and display ETA
-            if (progressState.startTime && progressState.percentage > 0 && progressState.percentage < 100) {
-                const elapsed = Date.now() - progressState.startTime;
-                const rate = progressState.percentage / elapsed;
-                const remaining = (100 - progressState.percentage) / rate;
-                const etaSeconds = Math.round(remaining / 1000);
+    dom.toggleProgressDetailsButton.addEventListener("click", () => {
+      appState.progressExpanded = !appState.progressExpanded;
+      renderProgressCard();
+    });
 
-                if (etaSeconds > 0) {
-                    if (etaSeconds < 60) {
-                        progressEta.textContent = '~' + etaSeconds + 's remaining';
-                    } else {
-                        const mins = Math.ceil(etaSeconds / 60);
-                        progressEta.textContent = '~' + mins + 'm remaining';
-                    }
-                } else {
-                    progressEta.textContent = '';
-                }
-            } else {
-                progressEta.textContent = '';
-            }
+    dom.messageInput.addEventListener("input", () => {
+      appState.draftText = dom.messageInput.value;
+    });
+
+    dom.messageInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+
+    dom.messageInput.addEventListener("paste", handlePaste);
+    document.addEventListener("paste", handlePaste);
+
+    document.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      appState.dragCounter += 1;
+      dom.messageInput.classList.add("paste-highlight");
+    });
+
+    document.addEventListener("dragleave", (event) => {
+      event.preventDefault();
+      appState.dragCounter = Math.max(0, appState.dragCounter - 1);
+      if (!appState.dragCounter) {
+        dom.messageInput.classList.remove("paste-highlight");
+      }
+    });
+
+    document.addEventListener("dragover", (event) => {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "copy";
+    });
+
+    document.addEventListener("drop", (event) => {
+      event.preventDefault();
+      appState.dragCounter = 0;
+      dom.messageInput.classList.remove("paste-highlight");
+      Array.from(event.dataTransfer?.files || []).forEach((file) => {
+        if (file.type.startsWith("image/")) {
+          processClipboardImage(file, "drop");
         }
+      });
+    });
 
-        function hideProgress() {
-            progressOverlay.classList.add('closing');
-            setTimeout(() => {
-                progressOverlay.style.display = 'none';
-                progressOverlay.classList.remove('closing');
-                document.body.classList.remove('has-progress');
-                progressState.visible = false;
-            }, 300);
-        }
+    dom.addImageButton.addEventListener("click", () => {
+      vscode.postMessage({ command: "uploadImage" });
+    });
 
-        function resetProgressState() {
-            progressState = {
-                visible: false,
-                percentage: 0,
-                title: 'Processing...',
-                step: 'Initializing...',
-                status: 'active',
-                startTime: null,
-                lastUpdateTime: null
-            };
-        }
+    dom.voiceButton.addEventListener("click", () => {
+      if (appState.isRecording) {
+        appState.isRecording = false;
+        renderComposer();
+        vscode.postMessage({ command: "stopRecording", timestamp: new Date().toISOString() });
+      } else {
+        appState.isRecording = true;
+        renderComposer();
+        vscode.postMessage({ command: "startRecording", timestamp: new Date().toISOString() });
+      }
+    });
 
-        // Progress close button handler
-        progressClose.addEventListener('click', hideProgress);
+    dom.saveDraftButton.addEventListener("click", () => {
+      saveDraft();
+    });
 
-        function addMessage(text, type = 'user', toolData = null, plain = false, isError = false) {
-            messageCount++;
-            const messageDiv = document.createElement('div');
-            messageDiv.className = \`message \${type}\${plain ? ' plain' : ''}\`;
+    dom.discardDraftButton.addEventListener("click", () => {
+      discardDraft();
+    });
 
-            const contentDiv = document.createElement('div');
-            contentDiv.className = plain ? 'message-content' : 'message-bubble';
-            contentDiv.textContent = text;
+    dom.sendButton.addEventListener("click", () => {
+      sendMessage();
+    });
 
-            // Add special styling for speech errors
-            if (isError && plain) {
-                contentDiv.setAttribute('data-speech-error', 'true');
-            }
+    dom.tabRow.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-tab]");
+      if (!button) {
+        return;
+      }
+      appState.activeTab = button.getAttribute("data-tab");
+      render();
+    });
 
-            messageDiv.appendChild(contentDiv);
+    dom.attachmentList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-remove-attachment]");
+      if (!button) {
+        return;
+      }
+      removeAttachment(button.getAttribute("data-remove-attachment"));
+    });
 
-            // Only add timestamp for non-plain messages
-            if (!plain) {
-                const timeDiv = document.createElement('div');
-                timeDiv.className = 'message-time';
-                timeDiv.textContent = new Date().toLocaleTimeString();
-                messageDiv.appendChild(timeDiv);
-            }
+    dom.resultActions.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-result-action]");
+      if (!button) {
+        return;
+      }
+      handleResultAction(
+        button.getAttribute("data-result-action"),
+        button.getAttribute("data-result-value")
+      );
+    });
 
-            messagesContainer.appendChild(messageDiv);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
+    window.addEventListener("message", (event) => {
+      const message = event.data || {};
 
-        function addSpeechError(errorMessage) {
-            // Add prominent error message with special styling
-            addMessage('🎤 Speech Error: ' + errorMessage, 'system', null, true, true);
-
-            // Add helpful troubleshooting tips based on error type
-            let tip = '';
-            if (errorMessage.includes('permission') || errorMessage.includes('Permission')) {
-                tip = '💡 Grant microphone access in system settings';
-            } else if (errorMessage.includes('busy') || errorMessage.includes('device')) {
-                tip = '💡 Close other recording apps and try again';
-            } else if (errorMessage.includes('SoX') || errorMessage.includes('sox')) {
-                tip = '💡 SoX audio tool may need to be installed or updated';
-            } else if (errorMessage.includes('timeout')) {
-                tip = '💡 Try speaking more clearly or check microphone connection';
-            } else if (errorMessage.includes('Whisper') || errorMessage.includes('transcription')) {
-                tip = '💡 Speech-to-text service may be unavailable';
-            } else {
-                tip = '💡 Check microphone permissions and try again';
-            }
-
-            if (tip) {
-                setTimeout(() => {
-                    addMessage(tip, 'system', null, true);
-                }, 500);
-            }
-        }
-
-        function showTyping() {
-            typingIndicator.style.display = 'flex';
-        }
-
-        function hideTyping() {
-            typingIndicator.style.display = 'none';
-        }
-
-        function simulateResponse(userMessage) {
-            // Don't simulate response - the backend handles acknowledgments now
-            // This avoids duplicate messages
-            hideTyping();
-        }
-
-        function sendMessage() {
-            const text = messageInput.value.trim();
-            if (!text && attachedImages.length === 0) return;
-
-            // Create message with text and images
-            let displayMessage = text;
-            if (attachedImages.length > 0) {
-                displayMessage += (text ? '\\n\\n' : '') + \`[\${attachedImages.length} image(s) attached]\`;
-            }
-
-            addMessage(displayMessage, 'user');
-
-            // Send to extension with images
-            vscode.postMessage({
-                command: 'send',
-                text: text,
-                attachments: attachedImages,
-                timestamp: new Date().toISOString(),
-                mcpIntegration: mcpIntegration
-            });
-
-            messageInput.value = '';
-            attachedImages = []; // Clear attached images
-            adjustTextareaHeight();
-
-            // Ensure mic icon is visible after sending message
-            toggleMicIcon();
-
-            simulateResponse(displayMessage);
-        }
-
-        function adjustTextareaHeight() {
-            messageInput.style.height = 'auto';
-            messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px';
-        }
-
-        function handleImageUploaded(imageData) {
-            // Add image to attachments with unique ID
-            const imageId = 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-            imageData.id = imageId;
-            attachedImages.push(imageData);
-
-            // Show image preview in messages with remove button
-            const imagePreview = document.createElement('div');
-            imagePreview.className = 'message system image-preview';
-            imagePreview.setAttribute('data-image-id', imageId);
-            imagePreview.innerHTML = \`
-                <div class="message-bubble image-container">
-                    <div class="image-header">
-                        <span class="image-filename">\${imageData.fileName}</span>
-                        <button class="remove-image-btn" onclick="removeImage('\${imageId}')" title="Remove image">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    </div>
-                    <img src="\${imageData.dataUrl}" style="max-width: 200px; max-height: 200px; border-radius: 8px; margin-top: 8px;" alt="Uploaded image">
-                    <div style="margin-top: 8px; font-size: 12px; opacity: 0.7;">Image ready to send (\${(imageData.size / 1024).toFixed(1)} KB)</div>
-                </div>
-                <div class="message-time">\${new Date().toLocaleTimeString()}</div>
-            \`;
-            messagesContainer.appendChild(imagePreview);
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-
-            updateImageCounter();
-        }
-
-        // Remove image function
-        function removeImage(imageId) {
-            // Remove from attachments array
-            attachedImages = attachedImages.filter(img => img.id !== imageId);
-
-            // Remove from DOM
-            const imagePreview = document.querySelector(\`[data-image-id="\${imageId}"]\`);
-            if (imagePreview) {
-                imagePreview.remove();
-            }
-
-            updateImageCounter();
-
-            // Log removal
-            console.log(\`🗑️ Image removed: \${imageId}\`);
-            vscode.postMessage({
-                command: 'logImageRemoved',
-                imageId: imageId
-            });
-        }
-
-        // Update image counter in input placeholder
-        function updateImageCounter() {
-            const count = attachedImages.length;
-            const baseText = mcpIntegration ? 'Cursor Agent is waiting for your response' : 'Type your review or feedback';
-
-            if (count > 0) {
-                messageInput.placeholder = \`\${baseText}... \${count} image(s) attached\`;
-            } else {
-                messageInput.placeholder = \`\${baseText}...\`;
-            }
-        }
-
-        // Handle paste events for images with debounce to prevent duplicates
-        let lastPasteTime = 0;
-        function handlePaste(e) {
-            const now = Date.now();
-            // Prevent duplicate pastes within 500ms
-            if (now - lastPasteTime < 500) {
-                return;
-            }
-
-            const clipboardData = e.clipboardData || window.clipboardData;
-            if (!clipboardData) return;
-
-            const items = clipboardData.items;
-            if (!items) return;
-
-            // Look for image items in clipboard
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-
-                if (item.type.indexOf('image') !== -1) {
-                    e.preventDefault(); // Prevent default paste behavior for images
-                    lastPasteTime = now; // Update last paste time
-
-                    const file = item.getAsFile();
-                    if (file) {
-                        processPastedImage(file);
-                    }
-                    break;
-                }
-            }
-        }
-
-        // Process pasted image file
-        function processPastedImage(file) {
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                const dataUrl = e.target.result;
-                const base64Data = dataUrl.split(',')[1];
-
-                // Generate a filename with timestamp
-                const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const extension = file.type.split('/')[1] || 'png';
-                const fileName = \`pasted-image-\${timestamp}.\${extension}\`;
-
-                const imageData = {
-                    fileName: fileName,
-                    filePath: 'clipboard', // Indicate this came from clipboard
-                    mimeType: file.type,
-                    base64Data: base64Data,
-                    dataUrl: dataUrl,
-                    size: file.size,
-                    source: 'paste' // Mark as pasted image
-                };
-
-                console.log(\`📋 Image pasted: \${fileName} (\${file.size} bytes)\`);
-
-                // Log the pasted image for MCP integration
-                vscode.postMessage({
-                    command: 'logPastedImage',
-                    fileName: fileName,
-                    size: file.size,
-                    mimeType: file.type
-                });
-
-                // Add to attachments and show preview
-                handleImageUploaded(imageData);
-            };
-
-            reader.onerror = function() {
-                console.error('Error reading pasted image');
-                addMessage('❌ Error processing pasted image', 'system', null, true);
-            };
-
-            reader.readAsDataURL(file);
-        }
-
-        // Drag and drop handlers
-        let dragCounter = 0;
-
-        function handleDragEnter(e) {
-            e.preventDefault();
-            dragCounter++;
-            if (hasImageFiles(e.dataTransfer)) {
-                document.body.classList.add('drag-over');
-                messageInput.classList.add('paste-highlight');
-            }
-        }
-
-        function handleDragLeave(e) {
-            e.preventDefault();
-            dragCounter--;
-            if (dragCounter <= 0) {
-                document.body.classList.remove('drag-over');
-                messageInput.classList.remove('paste-highlight');
-                dragCounter = 0;
-            }
-        }
-
-        function handleDragOver(e) {
-            e.preventDefault();
-            if (hasImageFiles(e.dataTransfer)) {
-                e.dataTransfer.dropEffect = 'copy';
-            }
-        }
-
-        function handleDrop(e) {
-            e.preventDefault();
-            dragCounter = 0;
-            document.body.classList.remove('drag-over');
-            messageInput.classList.remove('paste-highlight');
-
-            const files = e.dataTransfer.files;
-            if (files && files.length > 0) {
-                // Process files with a small delay to prevent conflicts with paste events
-                setTimeout(() => {
-                    for (let i = 0; i < files.length; i++) {
-                        const file = files[i];
-                        if (file.type.startsWith('image/')) {
-                            // Log drag and drop action
-                            vscode.postMessage({
-                                command: 'logDragDropImage',
-                                fileName: file.name,
-                                size: file.size,
-                                mimeType: file.type
-                            });
-                            processPastedImage(file);
-                        }
-                    }
-                }, 50);
-            }
-        }
-
-        function hasImageFiles(dataTransfer) {
-            if (dataTransfer.types) {
-                for (let i = 0; i < dataTransfer.types.length; i++) {
-                    if (dataTransfer.types[i] === 'Files') {
-                        return true; // We'll check for images on drop
-                    }
-                }
-            }
-            return false;
-        }
-
-        // Hide/show mic icon based on input
-        function toggleMicIcon() {
-            // Don't toggle if we're currently recording or processing
-            if (isRecording || micIcon.classList.contains('processing')) {
-                return;
-            }
-
-            if (messageInput.value.trim().length > 0) {
-                micIcon.style.opacity = '0';
-                micIcon.style.pointerEvents = 'none';
-            } else {
-                // Always ensure mic is visible and clickable when input is empty
-                micIcon.style.opacity = '0.7';
-                micIcon.style.pointerEvents = 'auto';
-                // Ensure proper mic icon state
-                if (!micIcon.classList.contains('fa-microphone')) {
-                    micIcon.className = 'fas fa-microphone mic-icon active';
-                }
-            }
-        }
-
-        // Check if speech recording is available
-        function isSpeechAvailable() {
-            return (
-                navigator.mediaDevices &&
-                navigator.mediaDevices.getUserMedia &&
-                typeof MediaRecorder !== 'undefined'
+      switch (message.command) {
+        case "configureSession":
+          resetForSession(message.payload || initialSession);
+          break;
+        case "focus":
+          if (appState.currentView === "home_idle") {
+            dom.startReviewButton.focus();
+          } else {
+            dom.messageInput.focus();
+          }
+          break;
+        case "updateMcpStatus":
+          appState.mcpActive = Boolean(message.active) || !appState.session?.mcpIntegration;
+          render();
+          break;
+        case "updateProgress":
+          applyProgress(message.data || {});
+          break;
+        case "hideProgress":
+        case "resetProgress":
+          appState.progress = null;
+          render();
+          break;
+        case "imageUploaded":
+          addAttachment(message.imageData || {});
+          break;
+        case "speechTranscribed":
+          if (message.transcription && message.transcription.trim()) {
+            dom.messageInput.value = dom.messageInput.value.trim()
+              ? dom.messageInput.value.trim() + "\\n" + message.transcription.trim()
+              : message.transcription.trim();
+            appState.draftText = dom.messageInput.value;
+            appState.isRecording = false;
+            pushActivity("Voice captured", "Speech transcription added to the draft.");
+            announce("Voice transcription added.");
+            render();
+            dom.messageInput.focus();
+          } else {
+            appState.isRecording = false;
+            applyRecovery(
+              "Voice capture did not complete.",
+              message.error || "No speech was detected from the latest recording.",
+              "Check microphone access, then try voice capture again or continue typing."
             );
-        }
+          }
+          break;
+        case "responseAcknowledged":
+          applySuccess(message.payload || {});
+          break;
+        case "addMessage":
+        case "newMessage":
+        case "appendTranscript":
+          appendTranscriptMessage(message.text, message.type || "system");
+          break;
+        default:
+          break;
+      }
+    });
 
-        // Speech recording functions - using Node.js backend
-        function startRecording() {
-            // Start recording via extension backend
-            vscode.postMessage({
-                command: 'startRecording',
-                timestamp: new Date().toISOString()
-            });
-
-            isRecording = true;
-            // Change icon to stop icon and add recording state
-            micIcon.className = 'fas fa-stop mic-icon recording';
-            micIcon.title = 'Recording... Click to stop';
-            console.log('🎤 Recording started - UI updated to stop icon');
-        }
-
-        function stopRecording() {
-            // Stop recording via extension backend
-            vscode.postMessage({
-                command: 'stopRecording',
-                timestamp: new Date().toISOString()
-            });
-
-            isRecording = false;
-            // Change to processing state
-            micIcon.className = 'fas fa-spinner mic-icon processing';
-            micIcon.title = 'Processing speech...';
-            messageInput.placeholder = 'Processing speech... Please wait';
-            console.log('🔄 Recording stopped - processing speech...');
-        }
-
-        function resetMicIcon() {
-            // Reset to normal microphone state
-            isRecording = false; // Ensure recording flag is cleared
-            micIcon.className = 'fas fa-microphone mic-icon active';
-            micIcon.title = 'Click to speak';
-            messageInput.placeholder = mcpIntegration ? 'Cursor Agent is waiting for your response...' : 'Type your review or feedback...';
-
-            // Force visibility based on input state
-            if (messageInput.value.trim().length === 0) {
-                micIcon.style.opacity = '0.7';
-                micIcon.style.pointerEvents = 'auto';
-            } else {
-                micIcon.style.opacity = '0';
-                micIcon.style.pointerEvents = 'none';
-            }
-
-            console.log('🎤 Mic icon reset to normal state');
-        }
-
-        // Event listeners
-        messageInput.addEventListener('input', () => {
-            adjustTextareaHeight();
-            toggleMicIcon();
-        });
-
-        messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage();
-            }
-        });
-
-        // Add paste event listener for images
-        messageInput.addEventListener('paste', handlePaste);
-        document.addEventListener('paste', handlePaste);
-
-        // Add drag and drop support for images
-        document.addEventListener('dragover', handleDragOver);
-        document.addEventListener('drop', handleDrop);
-        document.addEventListener('dragenter', handleDragEnter);
-        document.addEventListener('dragleave', handleDragLeave);
-
-        sendButton.addEventListener('click', () => {
-            sendMessage();
-        });
-
-        attachButton.addEventListener('click', () => {
-            vscode.postMessage({ command: 'uploadImage' });
-        });
-
-        micIcon.addEventListener('click', () => {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
-            }
-        });
-
-        // Handle messages from extension
-        window.addEventListener('message', event => {
-            const message = event.data;
-
-            switch (message.command) {
-                case 'updateProgress':
-                    showProgress(message.data || {});
-                    break;
-                case 'hideProgress':
-                    hideProgress();
-                    break;
-                case 'resetProgress':
-                    resetProgressState();
-                    break;
-                case 'addMessage':
-                    addMessage(message.text, message.type || 'system', message.toolData, message.plain || false);
-                    break;
-                case 'newMessage':
-                    addMessage(message.text, message.type || 'system', message.toolData, message.plain || false);
-                    if (message.mcpIntegration) {
-                        mcpIntegration = true;
-                        messageInput.placeholder = 'Cursor Agent is waiting for your response...';
-                    }
-                    break;
-                case 'focus':
-                    messageInput.focus();
-                    break;
-                case 'updateMcpStatus':
-                    updateMcpStatus(message.active);
-                    break;
-                case 'imageUploaded':
-                    handleImageUploaded(message.imageData);
-                    break;
-                case 'recordingStarted':
-                    console.log('✅ Recording confirmation received from backend');
-                    break;
-                case 'speechTranscribed':
-                    // Handle speech-to-text result
-                    console.log('📝 Speech transcription received:', message);
-                    if (message.transcription && message.transcription.trim()) {
-                        messageInput.value = message.transcription.trim();
-                        adjustTextareaHeight();
-                        messageInput.focus();
-                        console.log('✅ Text injected into input:', message.transcription.trim());
-                        // Reset mic icon after successful transcription
-                        resetMicIcon();
-                    } else if (message.error) {
-                        console.error('❌ Speech transcription error:', message.error);
-
-                        // Show prominent error message in chat
-                        addSpeechError(message.error);
-
-                        // Also show in placeholder briefly
-                        const originalPlaceholder = messageInput.placeholder;
-                        messageInput.placeholder = 'Speech failed - try again';
-                        setTimeout(() => {
-                            messageInput.placeholder = originalPlaceholder;
-                            resetMicIcon();
-                        }, 3000);
-                    } else {
-                        console.log('⚠️ Empty transcription received');
-
-                        // Show helpful message in chat
-                        addMessage('🎤 No speech detected - please speak clearly and try again', 'system', null, true);
-
-                        const originalPlaceholder = messageInput.placeholder;
-                        messageInput.placeholder = 'No speech detected - try again';
-                        setTimeout(() => {
-                            messageInput.placeholder = originalPlaceholder;
-                            resetMicIcon();
-                        }, 3000);
-                    }
-                    break;
-            }
-        });
-
-        // Initialize speech availability - now using SoX directly
-        function initializeSpeech() {
-            // Always available since we're using SoX directly
-            micIcon.style.opacity = '0.7';
-            micIcon.style.pointerEvents = 'auto';
-            micIcon.title = 'Click to speak (SoX recording)';
-            micIcon.classList.add('active');
-            console.log('Speech recording available via SoX direct recording');
-
-            // Ensure mic icon visibility on initialization
-            if (messageInput.value.trim().length === 0) {
-                micIcon.style.opacity = '0.7';
-                micIcon.style.pointerEvents = 'auto';
-            }
-        }
-
-        // Make removeImage globally accessible for onclick handlers
-        window.removeImage = removeImage;
-
-        // Initialize
-        vscode.postMessage({ command: 'ready' });
-        initializeSpeech();
-
-        // Focus input immediately
-        setTimeout(() => {
-            messageInput.focus();
-        }, 100);
-    </script>
+    resetForSession(initialSession);
+    vscode.postMessage({ command: "ready" });
+  </script>
 </body>
 </html>`;
 }

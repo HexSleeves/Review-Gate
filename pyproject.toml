@@ -1,5 +1,5 @@
 [build-system]
-requires      = ["setuptools>=61.0"]
+requires      = ["setuptools>=82.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -15,13 +15,13 @@ classifiers = [
   "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp>=1.26.0",
+    "mcp>=1.27.0",
     "typing-extensions>=4.15.0",
-    "Pillow>=12.1.1",
+    "Pillow>=12.2.0",
 ]
 
 [project.optional-dependencies]
-speech = ["faster-whisper>=1.0.0"]
+speech = ["faster-whisper>=1.2.1"]
 [project.scripts]
 review-gate-mcp = "review_gate_mcp.main:cli"
 
