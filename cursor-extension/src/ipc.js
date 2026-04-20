@@ -167,17 +167,38 @@ function checkTriggerFile(context, filePath) {
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, "utf8");
       const triggerData = JSON.parse(data);
+      const toolData = normalizeToolData(triggerData);
 
       // Check if this is for Cursor and Review Gate
       if (triggerData.editor && triggerData.editor !== "cursor") {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (cleanupError) {
+          console.log(`Could not clean non-cursor trigger file: ${cleanupError.message}`);
+        }
         return;
       }
 
       if (triggerData.system && triggerData.system !== REVIEW_GATE_PROTOCOL) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch (cleanupError) {
+          console.log(`Could not clean non-protocol trigger file: ${cleanupError.message}`);
+        }
         return;
       }
 
-      const triggerId = triggerData.data?.trigger_id;
+      if (!toolData) {
+        console.log("Ignoring invalid Review Gate trigger payload");
+        try {
+          fs.unlinkSync(filePath);
+        } catch (cleanupError) {
+          console.log(`Could not clean invalid trigger file: ${cleanupError.message}`);
+        }
+        return;
+      }
+
+      const triggerId = toolData.trigger_id;
       if (!handledTriggers.markHandled(triggerId)) {
         console.log(`Ignoring duplicate Review Gate trigger: ${triggerId}`);
         try {
@@ -188,12 +209,12 @@ function checkTriggerFile(context, filePath) {
         return;
       }
 
-      console.log(`Review Gate triggered: ${triggerData.data.tool}`);
+      console.log(`Review Gate triggered: ${toolData.tool}`);
 
       // Store current trigger data
-      state.currentTriggerData = triggerData.data;
+      state.currentTriggerData = toolData;
 
-      handleReviewGateToolCall(context, triggerData.data);
+      handleReviewGateToolCall(context, toolData);
 
       // Clean up trigger file immediately
       try {
@@ -203,16 +224,54 @@ function checkTriggerFile(context, filePath) {
       }
     }
   } catch (error) {
+    if (error instanceof SyntaxError) {
+      console.log(`Invalid trigger JSON, deleting file: ${error.message}`);
+      try {
+        fs.unlinkSync(filePath);
+      } catch (cleanupError) {
+        console.log(`Could not clean malformed trigger file: ${cleanupError.message}`);
+      }
+      return;
+    }
+
     if (error.code !== "ENOENT") {
       console.log(`Error reading trigger file: ${error.message}`);
     }
   }
 }
 
+function normalizeToolData(triggerData) {
+  if (!triggerData || typeof triggerData !== "object") {
+    return null;
+  }
+
+  const nested = triggerData.data;
+  const payload = nested && typeof nested === "object" ? { ...nested } : { ...triggerData };
+
+  if (!payload.tool) {
+    payload.tool = "review_gate_chat";
+  }
+
+  if (!payload.trigger_id && typeof triggerData.trigger_id === "string") {
+    payload.trigger_id = triggerData.trigger_id;
+  }
+
+  if (!payload.message && typeof triggerData.message === "string") {
+    payload.message = triggerData.message;
+  }
+
+  if (!payload.title && typeof triggerData.title === "string") {
+    payload.title = triggerData.title;
+  }
+
+  return payload;
+}
+
 function handleReviewGateToolCall(context, toolData) {
   let popupOptions = {};
+  const toolName = typeof toolData.tool === "string" ? toolData.tool : "review_gate_chat";
 
-  switch (toolData.tool) {
+  switch (toolName) {
     case "review_gate":
     case "review_gate_chat":
       popupOptions = {
@@ -242,9 +301,9 @@ function handleReviewGateToolCall(context, toolData) {
   const webview = getWebviewModule();
   webview.openReviewGatePopup(context, popupOptions);
 
-  sendExtensionAcknowledgement(toolData.trigger_id, toolData.tool);
+  sendExtensionAcknowledgement(toolData.trigger_id, toolName);
 
-  const toolDisplayName = toolData.tool.replace("_", " ").toUpperCase();
+  const toolDisplayName = toolName.replaceAll("_", " ").toUpperCase();
   vscode.window.showInformationMessage(`Cursor Agent triggered "${toolDisplayName}"`);
 }
 
