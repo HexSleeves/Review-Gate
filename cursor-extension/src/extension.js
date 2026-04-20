@@ -9,6 +9,10 @@ function activate(context) {
 
   // Create output channel for logging
   state.outputChannel = vscode.window.createOutputChannel("Review Gate V3");
+  state.context = context;
+  if (!state.extensionInstanceId) {
+    state.extensionInstanceId = `review-gate-extension-${process.pid}-${Date.now().toString(36)}`;
+  }
   state.logFilePath = getTempPath("review_gate_v3.log");
   context.subscriptions.push(state.outputChannel);
 
@@ -41,6 +45,9 @@ function deactivate() {
   if (state.outputChannel) {
     state.outputChannel.dispose();
   }
+
+  state.currentTransport = null;
+  state.currentRecovery = null;
 }
 
 module.exports = {

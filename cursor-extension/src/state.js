@@ -6,9 +6,12 @@ let state = {
   mcpStatus: false,
   statusCheckInterval: null,
   currentTriggerData: null,
+  currentTransport: null,
+  currentRecovery: null,
   currentRecording: null,
   context: null,
   logFilePath: null,
+  extensionInstanceId: null,
 };
 
 module.exports = state;

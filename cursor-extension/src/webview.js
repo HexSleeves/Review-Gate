@@ -3,6 +3,7 @@ const path = require("node:path");
 const vscode = require("vscode");
 const state = require("./state");
 const { startNodeRecording, stopNodeRecording } = require("./audio");
+const { REVIEW_GATE_PROTOCOL, atomicWriteJson, getResponseFilePath } = require("./ipcFiles");
 const { getMimeType } = require("./utils");
 const { logUserInput } = require("./logger");
 
@@ -30,6 +31,69 @@ function postToChatPanel(message) {
   if (state.chatPanel?.webview) {
     state.chatPanel.webview.postMessage(message);
   }
+}
+
+function normalizeResponseAttachments(attachments) {
+  if (!Array.isArray(attachments)) {
+    return [];
+  }
+
+  return attachments.map((attachment) => ({
+    id: attachment.id || null,
+    fileName: attachment.fileName || null,
+    filePath: attachment.filePath || null,
+    mimeType: attachment.mimeType || null,
+    size: Number.isFinite(Number(attachment.size)) ? Number(attachment.size) : 0,
+    dataUrl: attachment.dataUrl || null,
+    base64Data: attachment.base64Data || null,
+    source: attachment.source || null,
+  }));
+}
+
+function createResponseEnvelope(text, attachments, triggerId) {
+  const now = new Date().toISOString();
+  const activeTrigger = state.currentTriggerData || {};
+  const normalizedAttachments = normalizeResponseAttachments(attachments);
+
+  return {
+    protocol_version: activeTrigger.protocol_version || "legacy",
+    trigger_id: triggerId,
+    session_id: activeTrigger.session_id || triggerId,
+    response_status: "completed",
+    submitted_at: now,
+    validation_result: {
+      valid: true,
+      attachment_count: normalizedAttachments.length,
+    },
+    user_payload: {
+      text,
+      message: text,
+      attachments: normalizedAttachments,
+    },
+    extension_instance_id: state.extensionInstanceId || null,
+    source: REVIEW_GATE_PROTOCOL,
+    event_type: "MCP_RESPONSE",
+    timestamp: now,
+    user_input: text,
+    response: text,
+    message: text,
+    attachments: normalizedAttachments,
+  };
+}
+
+function writeResponseEnvelope(text, attachments, triggerId) {
+  if (!triggerId) {
+    throw new Error("Missing trigger_id for MCP response.");
+  }
+
+  const responseFile = getResponseFilePath(triggerId);
+  const envelope = createResponseEnvelope(text, attachments, triggerId);
+  atomicWriteJson(responseFile, envelope);
+
+  return {
+    envelope,
+    responseFile,
+  };
 }
 
 function openReviewGatePopup(context, options = {}) {
@@ -137,6 +201,12 @@ function openReviewGatePopup(context, options = {}) {
             command: "configureSession",
             payload: sessionPayload,
           });
+          if (state.currentRecovery) {
+            postToChatPanel({
+              command: "transportRecovery",
+              recovery: state.currentRecovery,
+            });
+          }
           break;
         default:
           break;
@@ -167,6 +237,37 @@ function handleReviewMessage(text, attachments, triggerId, mcpIntegration) {
     state.outputChannel.appendLine(
       `${mcpIntegration ? "MCP RESPONSE" : "REVIEW"} SUBMITTED: ${text}`
     );
+  }
+
+  if (mcpIntegration) {
+    try {
+      const { envelope, responseFile } = writeResponseEnvelope(text, attachments, triggerId);
+      state.currentRecovery = null;
+      if (state.outputChannel) {
+        state.outputChannel.appendLine(`[transport] Response envelope written: ${responseFile}`);
+      }
+      if (state.currentTransport?.triggerId === triggerId) {
+        state.currentTransport = {
+          ...state.currentTransport,
+          status: "responded",
+          respondedAt: envelope.submitted_at,
+        };
+      }
+    } catch (error) {
+      state.currentRecovery = {
+        problem: "Response delivery failed.",
+        cause: error.message,
+        fix: "Keep the draft open and retry after the extension transport recovers.",
+      };
+      if (state.outputChannel) {
+        state.outputChannel.appendLine(`[transport] Response write failed: ${error.message}`);
+      }
+      postToChatPanel({
+        command: "transportRecovery",
+        recovery: state.currentRecovery,
+      });
+      return;
+    }
   }
 
   if (state.chatPanel) {
@@ -1753,6 +1854,15 @@ function getReviewGateHTML(sessionPayload) {
         case "responseAcknowledged":
           applySuccess(message.payload || {});
           break;
+        case "transportRecovery":
+          if (message.recovery) {
+            applyRecovery(
+              message.recovery.problem || "Transport recovery needed.",
+              message.recovery.cause || "The extension transport reported an unknown failure.",
+              message.recovery.fix || "Retry after the extension transport recovers."
+            );
+          }
+          break;
         case "addMessage":
         case "newMessage":
         case "appendTranscript":
@@ -1772,4 +1882,8 @@ function getReviewGateHTML(sessionPayload) {
 
 module.exports = {
   openReviewGatePopup,
+  __test: {
+    createResponseEnvelope,
+    normalizeResponseAttachments,
+  },
 };
