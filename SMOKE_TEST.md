@@ -5,6 +5,7 @@
 1. Run `cd cursor-extension && npm run package:release`.
 2. Confirm release artifacts exist:
    - `cursor-extension/dist/extension.js`
+   - no `cursor-extension/dist/extension.js.map`
    - exactly one `cursor-extension/review-gate-v3-*.vsix`
 3. Run `./install.sh` on macOS or Linux.
 4. Confirm `~/.cursor/mcp.json` contains `review-gate-v3`.

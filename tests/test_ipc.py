@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
@@ -127,3 +128,71 @@ class TestIPCManager(unittest.IsolatedAsyncioTestCase):
                 Path(temp_dir).glob("review_gate_response_trigger-4.malformed.*.json")
             )
             self.assertTrue(quarantined_files)
+
+    async def test_reserve_request_slot_serializes_overlapping_requests(self):
+        manager = IPCManager()
+        first_entered = asyncio.Event()
+        allow_first_exit = asyncio.Event()
+        second_entered = asyncio.Event()
+        queue_positions = []
+        execution_order = []
+
+        async def first_request():
+            async with manager.reserve_request_slot("trigger-a") as slot:
+                queue_positions.append(slot["queue_position"])
+                execution_order.append("first-enter")
+                first_entered.set()
+                await allow_first_exit.wait()
+                execution_order.append("first-exit")
+
+        async def second_request():
+            await first_entered.wait()
+            async with manager.reserve_request_slot("trigger-b") as slot:
+                queue_positions.append(slot["queue_position"])
+                execution_order.append("second-enter")
+                second_entered.set()
+
+        first_task = asyncio.create_task(first_request())
+        second_task = asyncio.create_task(second_request())
+
+        await first_entered.wait()
+        await asyncio.sleep(0.05)
+        self.assertFalse(second_entered.is_set())
+
+        allow_first_exit.set()
+        await asyncio.gather(first_task, second_task)
+
+        self.assertEqual(queue_positions, [1, 2])
+        self.assertEqual(execution_order, ["first-enter", "first-exit", "second-enter"])
+
+    async def test_trigger_popup_replay_cleans_stale_artifacts_before_write(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = IPCManager()
+
+            def temp_path(filename: str) -> str:
+                return str(Path(temp_dir) / filename)
+
+            trigger_file = Path(temp_dir) / "review_gate_trigger.json"
+            trigger_file.write_text(
+                '{"trigger_id":"stale-trigger","message":"stale"}',
+                encoding="utf-8",
+            )
+
+            ack_file = Path(temp_dir) / "review_gate_ack_replay-1.json"
+            ack_file.write_text('{"acknowledged":true}', encoding="utf-8")
+            response_file = Path(temp_dir) / "review_gate_response_replay-1.json"
+            response_file.write_text('{"user_input":"old"}', encoding="utf-8")
+
+            with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path), mock.patch(
+                "review_gate_mcp.ipc.sync_file_system"
+            ):
+                success = await manager.trigger_cursor_popup_immediately(
+                    {"tool": "review_gate_chat", "trigger_id": "replay-1"}
+                )
+
+            self.assertTrue(success)
+            self.assertFalse(ack_file.exists())
+            self.assertFalse(response_file.exists())
+
+            written = trigger_file.read_text(encoding="utf-8")
+            self.assertIn('"trigger_id": "replay-1"', written)

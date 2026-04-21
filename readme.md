@@ -69,6 +69,7 @@ npm run package:release
 Expected artifacts after a release-prep run:
 
 - `cursor-extension/dist/extension.js`
+- no `cursor-extension/dist/extension.js.map` (release packaging cleans `dist/` before production bundling)
 - `cursor-extension/review-gate-v3-<version>.vsix` (single file; older VSIX files are removed before packaging)
 
 ## Runtime Notes

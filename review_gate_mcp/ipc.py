@@ -2,6 +2,7 @@ import json
 import os
 import time
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any, List
@@ -19,6 +20,13 @@ _CANCELLED_STATUSES = {"cancelled", "canceled"}
 
 class IPCManager:
     """Handles file-based IPC between MCP server and Cursor Extension"""
+
+    def __init__(self) -> None:
+        # File IPC supports one interactive review request at a time. Additional
+        # requests are queued in-process and handled FIFO by this lock.
+        self._request_queue_lock = asyncio.Lock()
+        self._queued_request_count = 0
+        self._active_trigger_id: Optional[str] = None
 
     def _trigger_file(self) -> Path:
         return Path(get_temp_path(TRIGGER_FILE_NAME))
@@ -57,6 +65,76 @@ class IPCManager:
                 f"⚠️ Could not quarantine malformed artifact {file_path}: {quarantine_error}"
             )
             self._safe_remove(file_path, reason=f"malformed artifact ({reason})")
+
+    def _prepare_trigger_file_for_write(self, trigger_file: Path, trigger_id: str) -> None:
+        """Enforce replay semantics before writing a new trigger payload.
+
+        Queue lifecycle:
+        - One active request owns review_gate_trigger.json at a time.
+        - Replays for the same trigger_id replace stale trigger artifacts.
+        - Unexpected leftovers from prior requests are removed before enqueueing.
+        """
+        if not trigger_file.exists():
+            return
+
+        try:
+            raw_content = trigger_file.read_text().strip()
+        except Exception as read_error:
+            logger.warning(f"⚠️ Could not inspect trigger artifact {trigger_file}: {read_error}")
+            self._safe_remove(trigger_file, reason="unreadable trigger artifact")
+            return
+
+        if not raw_content:
+            self._safe_remove(trigger_file, reason="empty trigger artifact")
+            return
+
+        try:
+            payload = json.loads(raw_content)
+        except json.JSONDecodeError:
+            self._quarantine_malformed_file(
+                trigger_file, reason="trigger json decode failure before enqueue"
+            )
+            return
+
+        existing_trigger_id = self._extract_trigger_id(payload)
+        if existing_trigger_id == trigger_id:
+            self._safe_remove(trigger_file, reason="stale replay trigger artifact")
+            return
+
+        if existing_trigger_id:
+            logger.warning(
+                "⚠️ Removing stale trigger artifact before enqueue: "
+                f"expected {trigger_id}, found {existing_trigger_id}"
+            )
+        self._safe_remove(trigger_file, reason="stale trigger artifact")
+
+    @asynccontextmanager
+    async def reserve_request_slot(self, trigger_id: str):
+        """Serialize overlapping review requests into a deterministic queue."""
+        self._queued_request_count += 1
+        queue_position = self._queued_request_count + (
+            1 if self._request_queue_lock.locked() else 0
+        )
+        if queue_position > 1:
+            logger.info(
+                f"⏳ Request queued at position {queue_position} for trigger {trigger_id}"
+            )
+
+        acquired = False
+        try:
+            await self._request_queue_lock.acquire()
+            acquired = True
+            self._queued_request_count -= 1
+            self._active_trigger_id = trigger_id
+            logger.info(f"🚦 Request slot acquired for trigger {trigger_id}")
+            yield {"queue_position": queue_position, "trigger_id": trigger_id}
+        finally:
+            if acquired:
+                self._active_trigger_id = None
+                self._request_queue_lock.release()
+                logger.info(f"🚦 Request slot released for trigger {trigger_id}")
+            else:
+                self._queued_request_count = max(0, self._queued_request_count - 1)
 
     @staticmethod
     def _extract_trigger_id(payload: Dict[str, Any]) -> str:
@@ -141,6 +219,7 @@ class IPCManager:
 
             trigger_file = self._trigger_file()
             self._cleanup_request_files(data.get("trigger_id"))
+            self._prepare_trigger_file_for_write(trigger_file, data.get("trigger_id", ""))
 
             trigger_data = {
                 "protocol_version": TRANSPORT_PROTOCOL_VERSION,

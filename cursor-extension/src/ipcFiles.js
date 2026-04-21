@@ -37,23 +37,45 @@ function createTriggerTracker(maxAgeMs = 10 * 60 * 1000) {
   const handled = new Map();
 
   function purge(now) {
-    for (const [triggerId, handledAt] of handled.entries()) {
-      if (now - handledAt > maxAgeMs) {
+    for (const [triggerId, entry] of handled.entries()) {
+      const handledAt = Number(entry?.handledAt);
+      if (!Number.isFinite(handledAt) || now - handledAt > maxAgeMs) {
         handled.delete(triggerId);
       }
     }
   }
 
   return {
-    markHandled(triggerId, now = Date.now()) {
+    markHandled(triggerId, replayTokenOrNow = null, nowOverride = null) {
+      let replayToken = null;
+      let now = Date.now();
+
+      if (typeof replayTokenOrNow === "number" && nowOverride === null) {
+        now = replayTokenOrNow;
+      } else {
+        replayToken =
+          typeof replayTokenOrNow === "string" && replayTokenOrNow ? replayTokenOrNow : null;
+        if (typeof nowOverride === "number") {
+          now = nowOverride;
+        }
+      }
+
       purge(now);
       if (!triggerId) {
         return true;
       }
-      if (handled.has(triggerId)) {
-        return false;
+
+      const existing = handled.get(triggerId);
+      if (existing) {
+        if (existing.replayToken === replayToken) {
+          return false;
+        }
       }
-      handled.set(triggerId, now);
+
+      handled.set(triggerId, {
+        handledAt: now,
+        replayToken,
+      });
       return true;
     },
     reset() {

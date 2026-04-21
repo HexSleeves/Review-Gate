@@ -6,12 +6,14 @@ const {
   getResponseFilePath,
 } = require("../src/ipcFiles");
 
-test("trigger tracker dedupes repeated trigger ids", () => {
+test("trigger tracker dedupes repeated trigger ids with replay token support", () => {
   const tracker = createTriggerTracker(1000);
 
-  assert.equal(tracker.markHandled("trigger-1", 100), true);
-  assert.equal(tracker.markHandled("trigger-1", 200), false);
-  assert.equal(tracker.markHandled("trigger-1", 1501), true);
+  assert.equal(tracker.markHandled("trigger-1", "created-1", 100), true);
+  assert.equal(tracker.markHandled("trigger-1", "created-1", 200), false);
+  assert.equal(tracker.markHandled("trigger-1", "created-2", 300), true);
+  assert.equal(tracker.markHandled("trigger-1", "created-2", 400), false);
+  assert.equal(tracker.markHandled("trigger-1", "created-2", 1501), true);
 });
 
 test("response files are scoped to a specific trigger id", () => {

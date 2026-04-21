@@ -20,8 +20,9 @@ npm install
 npm run package:release
 ```
 
-`npm run package:release` guarantees a clean `dist/extension.js` bundle and a single
-`review-gate-v3-<version>.vsix` in `cursor-extension/`.
+`npm run package:release` guarantees a clean `dist/extension.js` bundle, no
+`dist/extension.js.map`, and a single `review-gate-v3-<version>.vsix` in
+`cursor-extension/`.
 
 ## Manual Install
 

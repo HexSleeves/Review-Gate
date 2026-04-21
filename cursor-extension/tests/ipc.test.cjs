@@ -1,6 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
+const { createTriggerTracker } = require("../src/ipcFiles");
 
 function requireWithMocks(modulePath, mocks) {
   const originalLoad = Module._load;
@@ -114,4 +115,30 @@ test("normalizeProgressPayload keeps active trigger progress and ignores foreign
   );
 
   assert.equal(ignored.ignored, "progress update for trigger-2");
+});
+
+test("trigger replay semantics allow same trigger_id with a new envelope timestamp", () => {
+  const tracker = createTriggerTracker(1000);
+  const now = Date.parse("2026-04-20T12:00:02.000Z");
+  const first = normalizeToolData({
+    system: "review-gate-v3",
+    editor: "cursor",
+    trigger_id: "trigger-replay",
+    request_type: "review_gate_chat",
+    created_at: "2026-04-20T12:00:00.000Z",
+  }, now);
+  const replay = normalizeToolData({
+    system: "review-gate-v3",
+    editor: "cursor",
+    trigger_id: "trigger-replay",
+    request_type: "review_gate_chat",
+    created_at: "2026-04-20T12:00:01.000Z",
+  }, now);
+
+  const firstToken = `${first.envelope.createdAt || ""}|${first.envelope.expiresAt || ""}|${first.envelope.requestType || ""}`;
+  const replayToken = `${replay.envelope.createdAt || ""}|${replay.envelope.expiresAt || ""}|${replay.envelope.requestType || ""}`;
+
+  assert.equal(tracker.markHandled(first.envelope.triggerId, firstToken, 100), true);
+  assert.equal(tracker.markHandled(first.envelope.triggerId, firstToken, 200), false);
+  assert.equal(tracker.markHandled(replay.envelope.triggerId, replayToken, 300), true);
 });

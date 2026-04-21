@@ -320,105 +320,117 @@ class ReviewGateServer:
             "immediate_activation": True
         }
 
-        success = await self.ipc.trigger_cursor_popup_immediately(data)
+        # Explicit queue semantics: only one interactive review request owns the
+        # trigger/ack/response transport files at a time. Overlapping requests wait.
+        async with self.ipc.reserve_request_slot(trigger_id) as queue_meta:
+            if queue_meta["queue_position"] > 1:
+                logger.info(
+                    f"📥 Processing queued review request at position {queue_meta['queue_position']}"
+                )
 
-        if success:
-            logger.info(f"🔥 POPUP TRIGGERED IMMEDIATELY - waiting for user input (trigger_id: {trigger_id})")
+            success = await self.ipc.trigger_cursor_popup_immediately(data)
 
-            # Wait for extension acknowledgement first
-            ack_received = await self.ipc.wait_for_extension_acknowledgement(trigger_id, timeout=30)
-            if ack_received:
-                logger.info("📨 Extension acknowledged popup activation")
-            else:
-                logger.warning("⚠️ No extension acknowledgement received - popup may not have opened")
+            if success:
+                logger.info(
+                    f"🔥 POPUP TRIGGERED IMMEDIATELY - waiting for user input (trigger_id: {trigger_id})"
+                )
 
-            # Wait for user input from the popup with 5 MINUTE timeout
-            logger.info("⏳ Waiting for user input for up to 5 minutes...")
-            result = await self.ipc.wait_for_user_input(trigger_id, timeout=300)
+                # Wait for extension acknowledgement first
+                ack_received = await self.ipc.wait_for_extension_acknowledgement(trigger_id, timeout=30)
+                if ack_received:
+                    logger.info("📨 Extension acknowledged popup activation")
+                else:
+                    logger.warning("⚠️ No extension acknowledgement received - popup may not have opened")
 
-            if result:
-                result_status = (result.get("status") or "completed").lower()
-                user_input = result.get("user_input", "")
-                attachments = result.get("attachments", [])
+                # Wait for user input from the popup with 5 MINUTE timeout
+                logger.info("⏳ Waiting for user input for up to 5 minutes...")
+                result = await self.ipc.wait_for_user_input(trigger_id, timeout=300)
 
-                if result_status in {"cancelled", "canceled"}:
+                if result:
+                    result_status = (result.get("status") or "completed").lower()
+                    user_input = result.get("user_input", "")
+                    attachments = result.get("attachments", [])
+
+                    if result_status in {"cancelled", "canceled"}:
+                        if self._db and conversation_id:
+                            await self._db.update_conversation_status(conversation_id, "cancelled")
+                        logger.info(f"🚫 Review Gate request cancelled by user (trigger_id: {trigger_id})")
+                        return [
+                            TextContent(
+                                type="text",
+                                text="CANCELLED: User cancelled review gate request",
+                            ),
+                            TextContent(type="text", text=f"Session: {session_uuid}"),
+                        ]
+
+                    if not user_input:
+                        if self._db and conversation_id:
+                            await self._db.update_conversation_status(
+                                conversation_id, "transport_failed"
+                            )
+                        logger.error(
+                            f"❌ Transport response missing user input (trigger_id: {trigger_id})"
+                        )
+                        return [
+                            TextContent(
+                                type="text",
+                                text="ERROR: Received transport response without user input",
+                            ),
+                            TextContent(type="text", text=f"Session: {session_uuid}"),
+                        ]
+
+                    # Return user input directly to MCP client
+                    logger.info(f"✅ RETURNING USER REVIEW TO MCP CLIENT: {user_input[:100]}...")
+
+                    # Store user message in database
+                    if self._db:
+                        try:
+                            await self._db.add_message(
+                                conversation_id=conversation_id,
+                                role="user",
+                                content=user_input,
+                                attachments=attachments
+                            )
+                            logger.info("💾 User message stored in database")
+                        except Exception as e:
+                            logger.warning(f"⚠️ Could not store user message: {e}")
+
                     if self._db and conversation_id:
-                        await self._db.update_conversation_status(conversation_id, "cancelled")
-                    logger.info(f"🚫 Review Gate request cancelled by user (trigger_id: {trigger_id})")
-                    return [
-                        TextContent(
-                            type="text",
-                            text="CANCELLED: User cancelled review gate request",
-                        ),
-                        TextContent(type="text", text=f"Session: {session_uuid}"),
+                        await self._db.update_conversation_status(conversation_id, "completed")
+
+                    response_content = [
+                        TextContent(type="text", text=f"User Response: {user_input}"),
+                        TextContent(type="text", text=f"Session: {session_uuid}")
                     ]
 
-                if not user_input:
-                    if self._db and conversation_id:
-                        await self._db.update_conversation_status(
-                            conversation_id, "transport_failed"
-                        )
-                    logger.error(
-                        f"❌ Transport response missing user input (trigger_id: {trigger_id})"
-                    )
-                    return [
-                        TextContent(
-                            type="text",
-                            text="ERROR: Received transport response without user input",
-                        ),
-                        TextContent(type="text", text=f"Session: {session_uuid}"),
-                    ]
+                    # If we have stored attachment data, include images
+                    if attachments:
+                        for attachment in attachments:
+                            if attachment.get('mimeType', '').startswith('image/'):
+                                try:
+                                    image_content = ImageContent(
+                                        type="image",
+                                        data=attachment['base64Data'],
+                                        mimeType=attachment['mimeType']
+                                    )
+                                    response_content.append(image_content)
+                                    logger.info(
+                                        f"📸 Added image to response: {attachment.get('fileName', 'unknown')}"
+                                    )
+                                except Exception as e:
+                                    logger.error(f"❌ Error adding image to response: {e}")
 
-                # Return user input directly to MCP client
-                logger.info(f"✅ RETURNING USER REVIEW TO MCP CLIENT: {user_input[:100]}...")
+                    return response_content
 
-                # Store user message in database
-                if self._db:
-                    try:
-                        await self._db.add_message(
-                            conversation_id=conversation_id,
-                            role="user",
-                            content=user_input,
-                            attachments=attachments
-                        )
-                        logger.info("💾 User message stored in database")
-                    except Exception as e:
-                        logger.warning(f"⚠️ Could not store user message: {e}")
-
-                if self._db and conversation_id:
-                    await self._db.update_conversation_status(conversation_id, "completed")
-
-                response_content = [
-                    TextContent(type="text", text=f"User Response: {user_input}"),
-                    TextContent(type="text", text=f"Session: {session_uuid}")
-                ]
-
-                # If we have stored attachment data, include images
-                if attachments:
-                    for attachment in attachments:
-                        if attachment.get('mimeType', '').startswith('image/'):
-                            try:
-                                image_content = ImageContent(
-                                    type="image",
-                                    data=attachment['base64Data'],
-                                    mimeType=attachment['mimeType']
-                                )
-                                response_content.append(image_content)
-                                logger.info(f"📸 Added image to response: {attachment.get('fileName', 'unknown')}")
-                            except Exception as e:
-                                logger.error(f"❌ Error adding image to response: {e}")
-
-                return response_content
-            else:
                 # Update conversation status to timeout
                 if self._db and conversation_id:
                     await self._db.update_conversation_status(conversation_id, "timeout")
 
-                response = f"TIMEOUT: No user input received for review gate within 5 minutes"
+                response = "TIMEOUT: No user input received for review gate within 5 minutes"
                 logger.warning("⚠️ Review Gate timed out waiting for user input after 5 minutes")
                 return [TextContent(type="text", text=response)]
-        else:
-            response = f"ERROR: Failed to trigger Review Gate popup"
+
+            response = "ERROR: Failed to trigger Review Gate popup"
             logger.error("❌ Failed to trigger Review Gate popup")
             return [TextContent(type="text", text=response)]
 

@@ -508,7 +508,10 @@ function checkTriggerFile(context, filePath) {
 
       const { toolData, envelope } = normalized;
 
-      if (!handledTriggers.markHandled(envelope.triggerId)) {
+      // Replay token allows intentional retries with the same trigger_id while
+      // still dropping true duplicates from polling/re-reads.
+      const replayToken = `${envelope.createdAt || ""}|${envelope.expiresAt || ""}|${envelope.requestType || ""}`;
+      if (!handledTriggers.markHandled(envelope.triggerId, replayToken)) {
         cleanupArtifact(filePath, `Discarded duplicate trigger ${envelope.triggerId}`);
         return;
       }
