@@ -59,6 +59,18 @@ npm run test
 npm run package
 ```
 
+### Release Packaging
+
+```bash
+cd cursor-extension
+npm run package:release
+```
+
+Expected artifacts after a release-prep run:
+
+- `cursor-extension/dist/extension.js`
+- `cursor-extension/review-gate-v3-<version>.vsix` (single file; older VSIX files are removed before packaging)
+
 ## Runtime Notes
 
 - The MCP server is started with `python -m review_gate_mcp.main`

@@ -12,6 +12,17 @@ cd Review-Gate
 
 The installer targets `~/cursor-extensions/review-gate-v3`, merges the MCP config safely, and installs the packaged `review-gate-v3-*.vsix` if the `cursor` CLI is available.
 
+Before running the installer from a source checkout, generate release artifacts:
+
+```bash
+cd cursor-extension
+npm install
+npm run package:release
+```
+
+`npm run package:release` guarantees a clean `dist/extension.js` bundle and a single
+`review-gate-v3-<version>.vsix` in `cursor-extension/`.
+
 ## Manual Install
 
 ### 1. Copy the runtime files
@@ -22,6 +33,8 @@ cp -R review_gate_mcp ~/cursor-extensions/review-gate-v3/
 cp pyproject.toml requirements.txt readme.md ~/cursor-extensions/review-gate-v3/
 cp cursor-extension/review-gate-v3-*.vsix ~/cursor-extensions/review-gate-v3/
 ```
+
+`package:release` removes old VSIX files first, so the wildcard resolves to one file.
 
 ### 2. Create the Python environment
 

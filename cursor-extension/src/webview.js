@@ -750,10 +750,51 @@ function getReviewGateHTML(sessionPayload) {
         transition: none !important;
       }
     }
+
+    @media (prefers-contrast: more) {
+      .shell-header,
+      .region,
+      .status-summary,
+      .status-card,
+      .launcher-card,
+      .request-message,
+      .timeline-entry,
+      .attachment-card {
+        border-width: 2px;
+      }
+    }
+
+    @media (forced-colors: active) {
+      button,
+      textarea,
+      .shell-header,
+      .region,
+      .status-summary,
+      .status-card,
+      .launcher-card,
+      .request-message,
+      .timeline-entry,
+      .attachment-card {
+        border: 1px solid CanvasText;
+      }
+
+      .tab-button.active,
+      .primary-button {
+        forced-color-adjust: none;
+        background: Highlight;
+        border-color: Highlight;
+        color: HighlightText;
+      }
+
+      button:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid Highlight;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="app-shell">
+  <main class="app-shell" id="appShell">
     <header class="shell-header">
       <div>
         <p class="header-meta" id="headerMeta"></p>
@@ -765,7 +806,7 @@ function getReviewGateHTML(sessionPayload) {
       </div>
     </header>
 
-    <div id="liveRegion" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div id="liveRegion" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 
     <section class="region" id="launcherRegion" aria-labelledby="launcherHeading">
       <div class="region-header">
@@ -774,9 +815,9 @@ function getReviewGateHTML(sessionPayload) {
           <p class="secondary-copy">Manual open keeps recent sessions, templates, and keyboard help visible.</p>
         </div>
         <div class="launcher-actions">
-          <button class="primary-button" type="button" id="startReviewButton">Start new review</button>
-          <button class="secondary-button" type="button" id="resumeReviewButton">Resume last request</button>
-          <button class="ghost-button" type="button" id="openCheckpointsButton">View checkpoints</button>
+          <button class="primary-button" type="button" id="startReviewButton" aria-label="Start a new review draft">Start new review</button>
+          <button class="secondary-button" type="button" id="resumeReviewButton" aria-label="Resume the most recent request">Resume last request</button>
+          <button class="ghost-button" type="button" id="openCheckpointsButton" aria-label="View draft checkpoints">View checkpoints</button>
         </div>
       </div>
       <div class="launcher-grid">
@@ -801,7 +842,7 @@ function getReviewGateHTML(sessionPayload) {
           <p class="header-meta" id="requestEyebrow"></p>
           <h2 class="request-title" id="requestHeading">Request summary</h2>
         </div>
-        <button class="ghost-button" type="button" id="toggleSummaryButton" aria-expanded="true">Collapse summary</button>
+        <button class="ghost-button" type="button" id="toggleSummaryButton" aria-expanded="true" aria-controls="requestBody" aria-label="Collapse request summary">Collapse summary</button>
       </div>
       <div class="request-body" id="requestBody">
         <p class="request-summary" id="requestSummary"></p>
@@ -820,7 +861,7 @@ function getReviewGateHTML(sessionPayload) {
           </div>
           <div class="tab-row" id="tabRow" role="tablist" aria-label="History views"></div>
         </div>
-        <div class="timeline-list" id="historyPanel"></div>
+        <div class="timeline-list" id="historyPanel" role="tabpanel" tabindex="0"></div>
       </section>
 
       <section class="region" aria-labelledby="composerHeading">
@@ -833,10 +874,10 @@ function getReviewGateHTML(sessionPayload) {
         </div>
         <div class="composer-layout">
           <label for="messageInput">Response</label>
-          <textarea id="messageInput" class="message-input" rows="8" placeholder="Write a focused response."></textarea>
+          <textarea id="messageInput" class="message-input" rows="8" placeholder="Write a focused response." aria-describedby="composerHelper attachmentSummary"></textarea>
           <div class="composer-toolbar">
-            <button class="secondary-button" type="button" id="addImageButton">Add image</button>
-            <button class="secondary-button" type="button" id="voiceButton">Start voice</button>
+            <button class="secondary-button" type="button" id="addImageButton" aria-label="Add image attachment">Add image</button>
+            <button class="secondary-button" type="button" id="voiceButton" aria-label="Start voice capture">Start voice</button>
           </div>
           <div class="secondary-copy" id="attachmentSummary">No attachments</div>
           <div class="attachment-list" id="attachmentList"></div>
@@ -849,7 +890,7 @@ function getReviewGateHTML(sessionPayload) {
       </section>
     </div>
 
-    <section class="status-stack" aria-labelledby="statusHeading">
+    <section class="status-stack" role="region" aria-labelledby="statusHeading">
       <div class="status-summary">
         <div>
           <h2 class="region-title" id="statusHeading">Delivery status</h2>
@@ -864,7 +905,7 @@ function getReviewGateHTML(sessionPayload) {
             <h3 class="card-title" id="progressTitle">Delivery progress</h3>
             <p class="secondary-copy" id="progressSubtitle"></p>
           </div>
-          <button class="ghost-button" type="button" id="toggleProgressDetailsButton" aria-expanded="true">Hide details</button>
+          <button class="ghost-button" type="button" id="toggleProgressDetailsButton" aria-expanded="true" aria-controls="progressSteps" aria-label="Hide progress details">Hide details</button>
         </div>
         <div class="progress-bar" aria-hidden="true"><span id="progressFill" style="width: 0%;"></span></div>
         <div class="detail-copy" id="progressMeta"></div>
@@ -880,12 +921,18 @@ function getReviewGateHTML(sessionPayload) {
         <div class="result-actions" id="resultActions"></div>
       </article>
     </section>
-  </div>
+  </main>
 
   <script>
     const vscode = acquireVsCodeApi();
     const initialSession = ${serializedSession};
     const defaultTemplates = ["Code review request", "Architecture sign-off", "Release checklist"];
+    const historyTabs = [
+      { id: "request", label: "Request" },
+      { id: "history", label: "History" },
+      { id: "checkpoints", label: "Checkpoints" },
+      { id: "activity", label: "Activity" },
+    ];
     const defaultProgressSteps = [
       "Validate response payload",
       "Write response file",
@@ -1042,7 +1089,14 @@ function getReviewGateHTML(sessionPayload) {
     }
 
     function announce(text) {
-      dom.liveRegion.textContent = text;
+      const nextText = String(text || "").trim();
+      if (!nextText) {
+        return;
+      }
+      dom.liveRegion.textContent = "";
+      window.requestAnimationFrame(() => {
+        dom.liveRegion.textContent = nextText;
+      });
     }
 
     function setDraftPlaceholder() {
@@ -1318,25 +1372,27 @@ function getReviewGateHTML(sessionPayload) {
       dom.requestBody.classList.toggle("hidden", appState.summaryCollapsed);
       dom.toggleSummaryButton.textContent = appState.summaryCollapsed ? "Expand summary" : "Collapse summary";
       dom.toggleSummaryButton.setAttribute("aria-expanded", String(!appState.summaryCollapsed));
+      dom.toggleSummaryButton.setAttribute(
+        "aria-label",
+        appState.summaryCollapsed ? "Expand request summary" : "Collapse request summary"
+      );
     }
 
     function renderTabs() {
-      const tabs = [
-        { id: "request", label: "Request" },
-        { id: "history", label: "History" },
-        { id: "checkpoints", label: "Checkpoints" },
-        { id: "activity", label: "Activity" },
-      ];
-      dom.tabRow.innerHTML = tabs
+      dom.tabRow.innerHTML = historyTabs
         .map((tab) => {
           const selected = tab.id === appState.activeTab;
           return (
             '<button class="tab-button' +
             (selected ? " active" : "") +
+            '" id="history-tab-' +
+            tab.id +
             '" role="tab" type="button" data-tab="' +
             tab.id +
             '" aria-selected="' +
             String(selected) +
+            '" aria-controls="historyPanel" tabindex="' +
+            (selected ? "0" : "-1") +
             '">' +
             escapeHtml(tab.label) +
             "</button>"
@@ -1345,7 +1401,32 @@ function getReviewGateHTML(sessionPayload) {
         .join("");
     }
 
+    function selectHistoryTab(tabId) {
+      if (!historyTabs.some((tab) => tab.id === tabId)) {
+        return;
+      }
+      appState.activeTab = tabId;
+      render();
+    }
+
+    function moveHistoryTabFocus(step) {
+      const buttons = Array.from(dom.tabRow.querySelectorAll("[role=tab]"));
+      if (!buttons.length) {
+        return;
+      }
+      const currentIndex = buttons.findIndex((button) => button.getAttribute("data-tab") === appState.activeTab);
+      const startIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex = (startIndex + step + buttons.length) % buttons.length;
+      const nextButton = buttons[nextIndex];
+      const nextTabId = nextButton.getAttribute("data-tab");
+      if (nextTabId) {
+        selectHistoryTab(nextTabId);
+        nextButton.focus();
+      }
+    }
+
     function renderHistoryPanel() {
+      dom.historyPanel.setAttribute("aria-labelledby", "history-tab-" + appState.activeTab);
       if (appState.activeTab === "request") {
         const meta = deriveRequestMeta(appState.session || {});
         dom.historyPanel.innerHTML =
@@ -1439,6 +1520,10 @@ function getReviewGateHTML(sessionPayload) {
         ? "Cmd/Ctrl+Enter sends. Enter adds a newline. Attachments stay in the draft tray."
         : "Cmd/Ctrl+Enter sends. Enter adds a newline. Manual reviews stay local until sent.";
       dom.voiceButton.textContent = appState.isRecording ? "Stop voice" : "Start voice";
+      dom.voiceButton.setAttribute(
+        "aria-label",
+        appState.isRecording ? "Stop voice capture" : "Start voice capture"
+      );
       setDraftPlaceholder();
       renderAttachments();
     }
@@ -1477,6 +1562,10 @@ function getReviewGateHTML(sessionPayload) {
         percentage + "% complete · " + (appState.progress.status === "completed" ? "Complete" : "In progress");
       dom.toggleProgressDetailsButton.textContent = appState.progressExpanded ? "Hide details" : "Show details";
       dom.toggleProgressDetailsButton.setAttribute("aria-expanded", String(appState.progressExpanded));
+      dom.toggleProgressDetailsButton.setAttribute(
+        "aria-label",
+        appState.progressExpanded ? "Hide progress details" : "Show progress details"
+      );
       dom.progressSteps.innerHTML = appState.progressExpanded
         ? defaultProgressSteps
             .map((step, index) => {
@@ -1725,6 +1814,11 @@ function getReviewGateHTML(sessionPayload) {
       if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         sendMessage();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        saveDraft();
       }
     });
 
@@ -1794,8 +1888,41 @@ function getReviewGateHTML(sessionPayload) {
       if (!button) {
         return;
       }
-      appState.activeTab = button.getAttribute("data-tab");
-      render();
+      selectHistoryTab(button.getAttribute("data-tab"));
+    });
+
+    dom.tabRow.addEventListener("keydown", (event) => {
+      const tab = event.target.closest("[role=tab]");
+      if (!tab) {
+        return;
+      }
+
+      switch (event.key) {
+        case "ArrowLeft":
+        case "ArrowUp":
+          event.preventDefault();
+          moveHistoryTabFocus(-1);
+          break;
+        case "ArrowRight":
+        case "ArrowDown":
+          event.preventDefault();
+          moveHistoryTabFocus(1);
+          break;
+        case "Home":
+          event.preventDefault();
+          selectHistoryTab(historyTabs[0].id);
+          dom.tabRow.querySelector('[data-tab="' + historyTabs[0].id + '"]')?.focus();
+          break;
+        case "End":
+          event.preventDefault();
+          selectHistoryTab(historyTabs[historyTabs.length - 1].id);
+          dom.tabRow
+            .querySelector('[data-tab="' + historyTabs[historyTabs.length - 1].id + '"]')
+            ?.focus();
+          break;
+        default:
+          break;
+      }
     });
 
     dom.attachmentList.addEventListener("click", (event) => {
@@ -1900,5 +2027,6 @@ module.exports = {
   __test: {
     createResponseEnvelope,
     normalizeResponseAttachments,
+    getReviewGateHTML,
   },
 };

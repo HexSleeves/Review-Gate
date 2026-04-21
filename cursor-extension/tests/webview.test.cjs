@@ -57,7 +57,7 @@ const webviewModule = requireWithMocks("../src/webview.js", {
   },
 });
 
-const { createResponseEnvelope, normalizeResponseAttachments } = webviewModule.__test;
+const { createResponseEnvelope, normalizeResponseAttachments, getReviewGateHTML } = webviewModule.__test;
 
 test("normalizeResponseAttachments removes unsupported fields and preserves transport metadata", () => {
   const attachments = normalizeResponseAttachments([
@@ -132,4 +132,25 @@ test("openReviewGatePopup recovers from InvalidStateError when reusing a stale p
   });
   assert.equal(createWebviewPanelCalls, 1);
   assert.ok(state.chatPanel);
+});
+
+test("webview shell includes accessibility landmarks and keyboard support hooks", () => {
+  const html = getReviewGateHTML({
+    title: "Review Gate",
+    message: "Review this plan",
+    triggerId: "trigger-a11y",
+    mcpIntegration: true,
+    openedAt: "2026-04-21T00:00:00.000Z",
+    toolData: {},
+  });
+
+  assert.match(html, /<main class="app-shell" id="appShell">/);
+  assert.match(html, /id="liveRegion" class="sr-only" role="status" aria-live="polite" aria-atomic="true"/);
+  assert.match(html, /id="historyPanel" role="tabpanel" tabindex="0"/);
+  assert.match(html, /aria-describedby="composerHelper attachmentSummary"/);
+  assert.match(html, /aria-controls="historyPanel" tabindex="/);
+  assert.ok(html.includes('dom.tabRow.addEventListener("keydown"'));
+  assert.ok(html.includes('event.key.toLowerCase() === "s"'));
+  assert.match(html, /@media \(prefers-contrast: more\)/);
+  assert.match(html, /@media \(forced-colors: active\)/);
 });

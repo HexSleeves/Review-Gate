@@ -2,9 +2,13 @@
 
 ## Install / Startup
 
-1. Run `./install.sh` on macOS or Linux.
-2. Confirm `~/.cursor/mcp.json` contains `review-gate-v3`.
-3. Confirm `~/cursor-extensions/review-gate-v3` exists and includes:
+1. Run `cd cursor-extension && npm run package:release`.
+2. Confirm release artifacts exist:
+   - `cursor-extension/dist/extension.js`
+   - exactly one `cursor-extension/review-gate-v3-*.vsix`
+3. Run `./install.sh` on macOS or Linux.
+4. Confirm `~/.cursor/mcp.json` contains `review-gate-v3`.
+5. Confirm `~/cursor-extensions/review-gate-v3` exists and includes:
    - `review_gate_mcp/`
    - `venv/`
    - `review-gate-v3-*.vsix`
