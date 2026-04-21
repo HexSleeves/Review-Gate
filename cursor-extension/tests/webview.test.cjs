@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const Module = require("node:module");
 
+let createWebviewPanelCalls = 0;
+
 function requireWithMocks(modulePath, mocks) {
   const originalLoad = Module._load;
   Module._load = function mockedLoad(request, parent, isMain) {
@@ -33,6 +35,7 @@ const webviewModule = requireWithMocks("../src/webview.js", {
     ViewColumn: { One: 1 },
     window: {
       createWebviewPanel() {
+        createWebviewPanelCalls += 1;
         return {
           webview: {
             html: "",
@@ -41,6 +44,7 @@ const webviewModule = requireWithMocks("../src/webview.js", {
           },
           reveal() {},
           onDidDispose() {},
+          dispose() {},
           title: "",
         };
       },
@@ -99,4 +103,33 @@ test("createResponseEnvelope includes versioned and legacy response fields", () 
   assert.equal(envelope.validation_result.attachment_count, 1);
   assert.equal(envelope.extension_instance_id, "review-gate-extension-test");
   assert.equal(envelope.response, "Rollback order is DB, workers, then API.");
+});
+
+test("openReviewGatePopup recovers from InvalidStateError when reusing a stale panel", () => {
+  createWebviewPanelCalls = 0;
+  state.chatPanel = {
+    reveal() {
+      const error = new Error(
+        "Could not register a ServiceWorker: The document is in an invalid state."
+      );
+      error.name = "InvalidStateError";
+      throw error;
+    },
+    title: "Stale panel",
+    webview: {
+      postMessage() {},
+    },
+    dispose() {},
+  };
+
+  const context = { subscriptions: [] };
+
+  assert.doesNotThrow(() => {
+    webviewModule.openReviewGatePopup(context, {
+      mcpIntegration: true,
+      triggerId: "trigger-invalid-state",
+    });
+  });
+  assert.equal(createWebviewPanelCalls, 1);
+  assert.ok(state.chatPanel);
 });

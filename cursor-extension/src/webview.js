@@ -106,23 +106,39 @@ function openReviewGatePopup(context, options = {}) {
   }
 
   if (state.chatPanel) {
-    state.chatPanel.reveal(vscode.ViewColumn.One);
-    state.chatPanel.title = "Review Gate";
+    try {
+      state.chatPanel.reveal(vscode.ViewColumn.One);
+      state.chatPanel.title = "Review Gate";
 
-    setTimeout(() => {
-      postToChatPanel({
-        command: "configureSession",
-        payload: sessionPayload,
-      });
-    }, 100);
-
-    if (autoFocus) {
       setTimeout(() => {
-        postToChatPanel({ command: "focus" });
-      }, 220);
-    }
+        postToChatPanel({
+          command: "configureSession",
+          payload: sessionPayload,
+        });
+      }, 100);
 
-    return;
+      if (autoFocus) {
+        setTimeout(() => {
+          postToChatPanel({ command: "focus" });
+        }, 220);
+      }
+
+      return;
+    } catch (error) {
+      const isInvalidStateError =
+        error?.name === "InvalidStateError" ||
+        /invalid state/i.test(error?.message || "");
+      if (!isInvalidStateError) {
+        throw error;
+      }
+
+      try {
+        state.chatPanel.dispose?.();
+      } catch (_) {
+        // Ignore stale-panel dispose failures and recreate below.
+      }
+      state.chatPanel = null;
+    }
   }
 
   state.chatPanel = vscode.window.createWebviewPanel("reviewGateChat", title, vscode.ViewColumn.One, {

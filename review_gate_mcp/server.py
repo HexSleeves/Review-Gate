@@ -337,7 +337,38 @@ class ReviewGateServer:
             result = await self.ipc.wait_for_user_input(trigger_id, timeout=300)
 
             if result:
-                user_input, attachments = result
+                result_status = (result.get("status") or "completed").lower()
+                user_input = result.get("user_input", "")
+                attachments = result.get("attachments", [])
+
+                if result_status in {"cancelled", "canceled"}:
+                    if self._db and conversation_id:
+                        await self._db.update_conversation_status(conversation_id, "cancelled")
+                    logger.info(f"🚫 Review Gate request cancelled by user (trigger_id: {trigger_id})")
+                    return [
+                        TextContent(
+                            type="text",
+                            text="CANCELLED: User cancelled review gate request",
+                        ),
+                        TextContent(type="text", text=f"Session: {session_uuid}"),
+                    ]
+
+                if not user_input:
+                    if self._db and conversation_id:
+                        await self._db.update_conversation_status(
+                            conversation_id, "transport_failed"
+                        )
+                    logger.error(
+                        f"❌ Transport response missing user input (trigger_id: {trigger_id})"
+                    )
+                    return [
+                        TextContent(
+                            type="text",
+                            text="ERROR: Received transport response without user input",
+                        ),
+                        TextContent(type="text", text=f"Session: {session_uuid}"),
+                    ]
+
                 # Return user input directly to MCP client
                 logger.info(f"✅ RETURNING USER REVIEW TO MCP CLIENT: {user_input[:100]}...")
 
@@ -353,6 +384,9 @@ class ReviewGateServer:
                         logger.info("💾 User message stored in database")
                     except Exception as e:
                         logger.warning(f"⚠️ Could not store user message: {e}")
+
+                if self._db and conversation_id:
+                    await self._db.update_conversation_status(conversation_id, "completed")
 
                 response_content = [
                     TextContent(type="text", text=f"User Response: {user_input}"),
