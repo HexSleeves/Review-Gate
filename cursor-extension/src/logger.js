@@ -11,7 +11,7 @@ function logMessage(message) {
   }
 }
 
-function logUserInput(inputText, eventType = "MESSAGE", triggerId = null, attachments = []) {
+function logUserInput(inputText, eventType = "MESSAGE") {
   const timestamp = new Date().toISOString();
   const logMsg = `[${timestamp}] ${eventType}: ${inputText}`;
   console.log(`REVIEW GATE USER INPUT: ${inputText}`);

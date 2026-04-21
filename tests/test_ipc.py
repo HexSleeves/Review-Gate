@@ -41,5 +41,89 @@ class TestIPCManager(unittest.IsolatedAsyncioTestCase):
             with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path):
                 result = await manager.wait_for_user_input("trigger-1", timeout=1)
 
-            self.assertEqual(result, ("hello", []))
+            self.assertEqual(
+                result,
+                {"status": "completed", "user_input": "hello", "attachments": []},
+            )
             self.assertFalse(response_file.exists())
+
+    async def test_wait_for_acknowledgement_accepts_envelope_payload(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = IPCManager()
+
+            def temp_path(filename: str) -> str:
+                return str(Path(temp_dir) / filename)
+
+            ack_file = Path(temp_dir) / "review_gate_ack_trigger-1.json"
+            ack_file.write_text(
+                '{"protocol_version":"review-gate-transport/v1","type":"ack","trigger_id":"trigger-1","acknowledged":true}',
+                encoding="utf-8",
+            )
+
+            with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path):
+                acknowledged = await manager.wait_for_extension_acknowledgement(
+                    "trigger-1", timeout=1
+                )
+
+            self.assertTrue(acknowledged)
+            self.assertFalse(ack_file.exists())
+
+    async def test_wait_for_user_input_supports_cancelled_envelope_status(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = IPCManager()
+
+            def temp_path(filename: str) -> str:
+                return str(Path(temp_dir) / filename)
+
+            response_file = Path(temp_dir) / "review_gate_response_trigger-2.json"
+            response_file.write_text(
+                '{"protocol_version":"review-gate-transport/v1","type":"response","trigger_id":"trigger-2","response_status":"cancelled","user_payload":{"text":"","attachments":[]}}',
+                encoding="utf-8",
+            )
+
+            with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path):
+                result = await manager.wait_for_user_input("trigger-2", timeout=1)
+
+            self.assertEqual(
+                result,
+                {"status": "cancelled", "user_input": "", "attachments": []},
+            )
+            self.assertFalse(response_file.exists())
+
+    async def test_wait_for_user_input_removes_stale_mismatched_trigger_file(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = IPCManager()
+
+            def temp_path(filename: str) -> str:
+                return str(Path(temp_dir) / filename)
+
+            response_file = Path(temp_dir) / "review_gate_response_trigger-3.json"
+            response_file.write_text(
+                '{"trigger_id":"different-trigger","user_input":"hello"}',
+                encoding="utf-8",
+            )
+
+            with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path):
+                result = await manager.wait_for_user_input("trigger-3", timeout=0.3)
+
+            self.assertIsNone(result)
+            self.assertFalse(response_file.exists())
+
+    async def test_wait_for_user_input_quarantines_malformed_response(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = IPCManager()
+
+            def temp_path(filename: str) -> str:
+                return str(Path(temp_dir) / filename)
+
+            response_file = Path(temp_dir) / "review_gate_response_trigger-4.json"
+            response_file.write_text('{"trigger_id":"trigger-4","user_input":', encoding="utf-8")
+
+            with mock.patch("review_gate_mcp.ipc.get_temp_path", side_effect=temp_path):
+                result = await manager.wait_for_user_input("trigger-4", timeout=0.3)
+
+            self.assertIsNone(result)
+            quarantined_files = list(
+                Path(temp_dir).glob("review_gate_response_trigger-4.malformed.*.json")
+            )
+            self.assertTrue(quarantined_files)

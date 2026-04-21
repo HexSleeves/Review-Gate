@@ -1,6 +1,5 @@
 const fs = require("node:fs");
 const path = require("node:path");
-const vscode = require("vscode");
 const state = require("./state");
 const {
   REVIEW_GATE_PROTOCOL,
@@ -315,7 +314,7 @@ function pruneStaleArtifacts(now = Date.now()) {
 
       try {
         stats = fs.statSync(filePath);
-      } catch (error) {
+      } catch {
         continue;
       }
 
@@ -546,7 +545,7 @@ function checkTriggerFile(context, filePath) {
 }
 
 function handleReviewGateToolCall(context, toolData) {
-  let popupOptions = {};
+  let popupOptions;
   const toolName = typeof toolData.tool === "string" ? toolData.tool : "review_gate_chat";
 
   switch (toolName) {

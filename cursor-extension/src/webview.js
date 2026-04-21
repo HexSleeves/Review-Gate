@@ -98,8 +98,7 @@ function writeResponseEnvelope(text, attachments, triggerId) {
 
 function openReviewGatePopup(context, options = {}) {
   const sessionPayload = createSessionPayload(options);
-  const { autoFocus, message, title, toolData, mcpIntegration, triggerId, specialHandling } =
-    sessionPayload;
+  const { autoFocus, title, toolData, mcpIntegration, triggerId, specialHandling } = sessionPayload;
 
   if (triggerId) {
     state.currentTriggerData = { ...toolData, trigger_id: triggerId };
@@ -134,7 +133,7 @@ function openReviewGatePopup(context, options = {}) {
 
       try {
         state.chatPanel.dispose?.();
-      } catch (_) {
+      } catch {
         // Ignore stale-panel dispose failures and recreate below.
       }
       state.chatPanel = null;
