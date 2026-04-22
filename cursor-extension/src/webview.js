@@ -602,6 +602,18 @@ function getReviewGateHTML(sessionPayload) {
       color: var(--vscode-button-foreground);
     }
 
+    .secondary-button[aria-disabled="true"],
+    .ghost-button[aria-disabled="true"] {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .secondary-button[aria-disabled="true"]:hover,
+    .ghost-button[aria-disabled="true"]:hover {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+
     .timeline-list,
     .attachment-list,
     .progress-step-list,
@@ -1346,8 +1358,15 @@ function getReviewGateHTML(sessionPayload) {
             "<li><span>" + escapeHtml(template) + '</span><span class="entry-time">Ready</span></li>'
         )
         .join("");
-      dom.resumeReviewButton.disabled = !appState.recentSessions.length;
-      dom.openCheckpointsButton.disabled = !appState.checkpoints.length;
+      const canResume = appState.recentSessions.length > 0;
+      const canOpenCheckpoints = appState.checkpoints.length > 0;
+      dom.startReviewButton.tabIndex = 0;
+      dom.resumeReviewButton.tabIndex = 0;
+      dom.openCheckpointsButton.tabIndex = 0;
+      dom.resumeReviewButton.removeAttribute("disabled");
+      dom.openCheckpointsButton.removeAttribute("disabled");
+      dom.resumeReviewButton.setAttribute("aria-disabled", String(!canResume));
+      dom.openCheckpointsButton.setAttribute("aria-disabled", String(!canOpenCheckpoints));
     }
 
     function renderRequestRegion() {
@@ -1681,6 +1700,34 @@ function getReviewGateHTML(sessionPayload) {
       dom.messageInput.focus();
     }
 
+    function getLauncherActionButtons() {
+      return [dom.startReviewButton, dom.resumeReviewButton, dom.openCheckpointsButton].filter(Boolean);
+    }
+
+    function handleLauncherTabKeydown(event) {
+      if (event.key !== "Tab" || appState.currentView !== "home_idle") {
+        return;
+      }
+      const launcherButtons = getLauncherActionButtons();
+      const currentIndex = launcherButtons.indexOf(document.activeElement);
+      if (currentIndex < 0) {
+        return;
+      }
+
+      if (event.shiftKey) {
+        if (currentIndex > 0) {
+          event.preventDefault();
+          launcherButtons[currentIndex - 1].focus();
+        }
+        return;
+      }
+
+      if (currentIndex < launcherButtons.length - 1) {
+        event.preventDefault();
+        launcherButtons[currentIndex + 1].focus();
+      }
+    }
+
     function handleResultAction(actionId, actionValue) {
       switch (actionId) {
         case "focus-draft":
@@ -1785,16 +1832,25 @@ function getReviewGateHTML(sessionPayload) {
     });
 
     dom.resumeReviewButton.addEventListener("click", () => {
+      if (dom.resumeReviewButton.getAttribute("aria-disabled") === "true") {
+        announce("No recent sessions are available yet.");
+        return;
+      }
       ensureDrafting();
       appState.activeTab = "history";
       render();
     });
 
     dom.openCheckpointsButton.addEventListener("click", () => {
+      if (dom.openCheckpointsButton.getAttribute("aria-disabled") === "true") {
+        announce("No checkpoints are available yet.");
+        return;
+      }
       ensureDrafting();
       appState.activeTab = "checkpoints";
       render();
     });
+    document.addEventListener("keydown", handleLauncherTabKeydown, true);
 
     dom.toggleSummaryButton.addEventListener("click", () => {
       appState.summaryCollapsed = !appState.summaryCollapsed;

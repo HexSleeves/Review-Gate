@@ -149,6 +149,29 @@ test("webview shell includes accessibility landmarks and keyboard support hooks"
   assert.match(html, /id="historyPanel" role="tabpanel" tabindex="0"/);
   assert.match(html, /aria-describedby="composerHelper attachmentSummary"/);
   assert.match(html, /aria-controls="historyPanel" tabindex="/);
+  assert.match(
+    html,
+    /id="startReviewButton"[\s\S]*id="resumeReviewButton"[\s\S]*id="openCheckpointsButton"/
+  );
+  assert.ok(html.includes('dom.resumeReviewButton.setAttribute("aria-disabled", String(!canResume));'));
+  assert.ok(
+    html.includes(
+      'dom.openCheckpointsButton.setAttribute("aria-disabled", String(!canOpenCheckpoints));'
+    )
+  );
+  assert.ok(html.includes('if (dom.resumeReviewButton.getAttribute("aria-disabled") === "true")'));
+  assert.ok(
+    html.includes('if (dom.openCheckpointsButton.getAttribute("aria-disabled") === "true")')
+  );
+  assert.ok(html.includes('function handleLauncherTabKeydown(event)'));
+  assert.ok(html.includes('event.key !== "Tab" || appState.currentView !== "home_idle"'));
+  assert.ok(html.includes('const currentIndex = launcherButtons.indexOf(document.activeElement);'));
+  assert.ok(html.includes('launcherButtons[currentIndex + 1].focus();'));
+  assert.ok(html.includes('launcherButtons[currentIndex - 1].focus();'));
+  assert.ok(html.includes('dom.startReviewButton.tabIndex = 0;'));
+  assert.ok(html.includes('dom.resumeReviewButton.tabIndex = 0;'));
+  assert.ok(html.includes('dom.openCheckpointsButton.tabIndex = 0;'));
+  assert.ok(html.includes('document.addEventListener("keydown", handleLauncherTabKeydown, true);'));
   assert.ok(html.includes('dom.tabRow.addEventListener("keydown"'));
   assert.ok(html.includes('event.key.toLowerCase() === "s"'));
   assert.match(html, /@media \(prefers-contrast: more\)/);
