@@ -2,7 +2,7 @@
   "name": "review-gate-v3",
   "displayName": "Review Gate V3",
   "description": "Advanced Review Gate system with MCP integration for Cursor IDE",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "author": "HexSleeves",
   "publisher": "HexSleeves",
   "icon": "icon.png",
